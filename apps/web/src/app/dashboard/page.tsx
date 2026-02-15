@@ -9,8 +9,6 @@ import {
   Fuel,
   Users,
   AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
   Loader2,
   Clock,
   CheckCircle2,
@@ -137,84 +135,114 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 p-6 rounded-2xl border border-zinc-900 bg-zinc-900/30 min-h-[400px]">
             <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-              Sales Distribution
+              7-Day Sales Trend
             </h3>
-            <div className="h-full flex flex-col items-center justify-center p-8 border border-dashed border-zinc-800 rounded-xl">
-              <div className="flex gap-8 items-end h-40 mb-8">
-                <div
-                  className="w-12 bg-red-600 rounded-t-lg"
-                  style={{ height: summary?.todaySales > 0 ? "70%" : "5%" }}
-                />
-                <div
-                  className="w-12 bg-zinc-800 rounded-t-lg"
-                  style={{ height: "40%" }}
-                />
-                <div
-                  className="w-12 bg-emerald-600 rounded-t-lg"
-                  style={{ height: "90%" }}
-                />
+            <div className="h-full flex flex-col items-center justify-end p-8 border border-dashed border-zinc-800 rounded-xl relative">
+              <div className="flex gap-4 items-end w-full justify-between px-4">
+                {summary?.trend?.map((day: any, i: number) => {
+                  const max = Math.max(
+                    ...summary.trend.map((t: any) => t.amount),
+                    1,
+                  );
+                  const height = `${(day.amount / max) * 100}%`;
+                  return (
+                    <div
+                      key={i}
+                      className="flex flex-col items-center gap-2 group relative"
+                    >
+                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-800 text-zinc-100 text-[10px] px-2 py-1 rounded border border-zinc-700 pointer-events-none whitespace-nowrap z-10">
+                        Rs. {day.amount.toLocaleString()}
+                      </div>
+                      <div
+                        className="w-8 md:w-12 bg-red-600/80 hover:bg-red-500 rounded-t-lg transition-all duration-500"
+                        style={{
+                          height: day.amount > 0 ? height : "4px",
+                          minHeight: day.amount > 0 ? "20px" : "4px",
+                        }}
+                      />
+                      <span className="text-[10px] text-zinc-500 uppercase font-bold">
+                        {new Date(day.date).toLocaleDateString(undefined, {
+                          weekday: "short",
+                        })}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-              <p className="text-zinc-600 text-sm">
-                Real-time analytics processing for {user?.username}
+              <p className="text-zinc-600 text-[10px] uppercase tracking-widest font-bold mt-8">
+                Daily Revenue Stream (PKR)
               </p>
             </div>
           </div>
 
           <div className="p-6 rounded-2xl border border-zinc-900 bg-zinc-900/30 min-h-[400px]">
             <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-              System Events
+              Tank Gauges
             </h3>
-            <div className="space-y-4">
-              {summary?.activeShift ? (
-                <div className="p-4 rounded-xl bg-emerald-600/5 border border-emerald-600/10 flex gap-4">
-                  <Fuel className="text-emerald-600 shrink-0" size={20} />
-                  <div>
-                    <p className="text-sm font-bold text-zinc-200">
-                      Shift Started
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      New shift initiated by operator.
-                    </p>
+            <div className="space-y-6">
+              {summary?.inventory?.map((tank: any, i: number) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-tight">
+                    <span className="text-zinc-400">{tank.name}</span>
+                    <span
+                      className={
+                        tank.level < 20
+                          ? "text-rose-500 animate-pulse"
+                          : "text-emerald-500"
+                      }
+                    >
+                      {tank.level.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 w-full bg-zinc-950 rounded-full overflow-hidden border border-zinc-900">
+                    <div
+                      className={`h-full transition-all duration-1000 ${tank.level < 20 ? "bg-rose-600 shadow-[0_0_10px_rgba(225,29,72,0.4)]" : "bg-emerald-600 shadow-[0_0_10px_rgba(16,185,129,0.2)]"}`}
+                      style={{ width: `${tank.level}%` }}
+                    />
                   </div>
                 </div>
-              ) : null}
-              {summary?.lowStockCount > 0 ? (
-                <div className="p-4 rounded-xl bg-red-600/5 border border-red-600/10 flex gap-4">
-                  <AlertTriangle className="text-red-600 shrink-0" size={20} />
+              ))}
+
+              <hr className="border-zinc-800 my-4" />
+
+              <h4 className="text-[10px] font-bold uppercase text-zinc-500 tracking-widest mb-4">
+                System Alerts
+              </h4>
+              <div className="space-y-3">
+                {summary?.activeShift ? (
+                  <div className="flex items-start gap-4 p-3 rounded-lg bg-emerald-600/5 border border-emerald-600/10 transition-colors hover:bg-emerald-600/10">
+                    <Fuel className="text-emerald-600 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-xs font-bold text-zinc-200">
+                        Active Duty
+                      </p>
+                      <p className="text-[10px] text-zinc-500">
+                        Transaction recording is live.
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+                {summary?.lowStockCount > 0 && (
+                  <div className="flex items-start gap-4 p-3 rounded-lg bg-rose-600/5 border border-rose-600/10 transition-colors hover:bg-rose-600/10">
+                    <AlertTriangle className="text-rose-600 mt-0.5" size={16} />
+                    <div>
+                      <p className="text-xs font-bold text-zinc-200">
+                        Critical Stock
+                      </p>
+                      <p className="text-[10px] text-zinc-500">
+                        {summary.lowStockCount} tanks require refill.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div className="flex items-start gap-4 p-3 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                  <CheckCircle2 className="text-zinc-500 mt-0.5" size={16} />
                   <div>
-                    <p className="text-sm font-bold text-zinc-200">
-                      Low Stock Alert
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      {summary.lowStockCount} tanks require monitoring.
+                    <p className="text-xs font-bold text-zinc-200">Safe Mode</p>
+                    <p className="text-[10px] text-zinc-500">
+                      All services operational.
                     </p>
                   </div>
-                </div>
-              ) : (
-                <div className="p-4 rounded-xl bg-emerald-600/5 border border-emerald-600/10 flex gap-4">
-                  <CheckCircle2
-                    className="text-emerald-600 shrink-0"
-                    size={20}
-                  />
-                  <div>
-                    <p className="text-sm font-bold text-zinc-200">
-                      Stock Optimal
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      All tanks at healthy levels.
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="p-4 rounded-xl bg-zinc-900/50 border border-zinc-800 flex gap-4">
-                <Users className="text-zinc-500 shrink-0" size={20} />
-                <div>
-                  <p className="text-sm font-bold text-zinc-200">
-                    Manager Online
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    Authenticated access session active.
-                  </p>
                 </div>
               </div>
             </div>

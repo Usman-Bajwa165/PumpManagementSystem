@@ -1,5 +1,0 @@
-src/app/inventory/page.tsx(95,45): error TS18046: 'res.data' is of type 'unknown'.
-src/app/login/page.tsx(22,15): error TS2339: Property 'access_token' does not exist on type 'unknown'.
-src/app/login/page.tsx(22,29): error TS2339: Property 'user' does not exist on type 'unknown'.
-src/lib/api.ts(1,17): error TS2305: Module '"axios"' has no exported member 'InternalAxiosRequestConfig'.
-src/lib/api.ts(1,45): error TS2305: Module '"axios"' has no exported member 'AxiosResponse'.

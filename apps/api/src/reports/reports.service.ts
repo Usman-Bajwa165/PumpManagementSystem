@@ -193,6 +193,31 @@ export class ReportsService {
       (t) => (Number(t.currentStock) / Number(t.capacity)) * 100 < 20,
     ).length;
 
+    // Sales Trend (Last 7 Days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const trendSales = await this.prisma.transaction.findMany({
+      where: {
+        creditAccount: { name: 'Fuel Sales' },
+        createdAt: { gte: sevenDaysAgo },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const trend = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      d.setHours(0, 0, 0, 0);
+      const daySales = trendSales
+        .filter((s) => {
+          const sd = new Date(s.createdAt);
+          sd.setHours(0, 0, 0, 0);
+          return sd.getTime() === d.getTime();
+        })
+        .reduce((sum, s) => sum + Number(s.amount), 0);
+      return { date: d.toISOString().split('T')[0], amount: daySales };
+    });
+
     return {
       todaySales: totalSales,
       activeShift: activeShift
@@ -200,6 +225,11 @@ export class ReportsService {
         : null,
       creditSales: totalCredit,
       lowStockCount,
+      trend,
+      inventory: tanks.map((t) => ({
+        name: t.name,
+        level: (Number(t.currentStock) / Number(t.capacity)) * 100,
+      })),
     };
   }
 }

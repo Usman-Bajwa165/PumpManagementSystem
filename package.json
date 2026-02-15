@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently -n \"DOCKER,API,WEB\" -c \"blue,green,magenta\" \"docker compose up\" \"npm run dev -w api\" \"npm run dev -w web\"",
+    "predev": "docker compose up -d",
+    "dev": "npx -y concurrently -n \"API,WEB\" -c \"green,magenta\" \"npm run dev --workspace api\" \"npm run dev --workspace web\"",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "test": "echo \"Error: no test specified\" && exit 1"
