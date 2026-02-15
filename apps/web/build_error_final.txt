@@ -1,0 +1,37 @@
+
+> web@0.1.0 build
+> next build
+
+ΓÜá Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\Window\Desktop\Pump\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\Window\Desktop\Pump\apps\web\package-lock.json
+
+Γû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env
+
+  Creating an optimized production build ...
+Γ£ô Compiled successfully in 15.7s
+  Running TypeScript ...
+Failed to compile.
+
+./src/app/inventory/page.tsx:53:16
+Type error: Argument of type 'unknown' is not assignable to parameter of type 'SetStateAction<Tank[]>'.
+
+  51 |     try {
+  52 |       const res = await api.get("/inventory/tanks");
+> 53 |       setTanks(res.data);
+     |                ^
+  54 |     } catch (err) {
+  55 |       console.error("Failed to fetch tanks", err);
+  56 |     } finally {
+Next.js build worker exited with code: 1 and signal: null
+npm error Lifecycle script `build` failed with error:
+npm error code 1
+npm error path C:\Users\Window\Desktop\Pump\apps\web
+npm error workspace web@0.1.0
+npm error location C:\Users\Window\Desktop\Pump\apps\web
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c next build

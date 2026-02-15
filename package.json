@@ -1,0 +1,26 @@
+{
+  "name": "pump",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently -n \"DOCKER,API,WEB\" -c \"blue,green,magenta\" \"docker compose up\" \"npm run dev -w api\" \"npm run dev -w web\"",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "workspaces": [
+    "apps/*"
+  ],
+  "type": "commonjs",
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "@prisma/client": "^7.4.0",
+    "autoprefixer": "^10.4.24",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18"
+  }
+}

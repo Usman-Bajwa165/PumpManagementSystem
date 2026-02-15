@@ -1,0 +1,147 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  OPERATOR
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+  role      Role     @default(OPERATOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  openedShifts Shift[] @relation("ShiftOpener")
+  closedShifts Shift[] @relation("ShiftCloser")
+}
+
+model Shift {
+  id        String      @id @default(uuid())
+  startTime DateTime    @default(now())
+  endTime   DateTime?
+  status    ShiftStatus @default(OPEN)
+  
+  openerId  String
+  opener    User     @relation("ShiftOpener", fields: [openerId], references: [id])
+  
+  closerId  String?
+  closer    User?    @relation("ShiftCloser", fields: [closerId], references: [id])
+
+  transactions Transaction[]
+  readings     NozzleReading[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id      String   @id @default(uuid())
+  name    String   @unique // Petrol, Diesel, lubricant
+  price   Decimal  @db.Decimal(10, 2)
+  tanks   Tank[]
+}
+
+model Tank {
+  id          String   @id @default(uuid())
+  name        String
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  capacity    Decimal  @db.Decimal(10, 2)
+  currentStock Decimal @db.Decimal(10, 2)
+  
+  nozzles     Nozzle[]
+  dips        TankDip[] // Physical measurements
+}
+
+model Nozzle {
+  id          String   @id @default(uuid())
+  name        String
+  tankId      String
+  tank        Tank     @relation(fields: [tankId], references: [id])
+  lastReading Decimal  @db.Decimal(15, 3) // Cumulative reading
+  
+  readings    NozzleReading[]
+}
+
+model NozzleReading {
+  id            String   @id @default(uuid())
+  shiftId       String
+  shift         Shift    @relation(fields: [shiftId], references: [id])
+  nozzleId      String
+  nozzle        Nozzle   @relation(fields: [nozzleId], references: [id])
+  
+  openingReading Decimal @db.Decimal(15, 3)
+  closingReading Decimal? @db.Decimal(15, 3)
+  
+  // Computed sale = closing - opening
+}
+
+model TankDip {
+  id        String   @id @default(uuid())
+  tankId    String
+  tank      Tank     @relation(fields: [tankId], references: [id])
+  volume    Decimal  @db.Decimal(10, 2)
+  measuredAt DateTime @default(now())
+}
+
+// --- Double Entry Accounting ---
+
+model Account {
+  id          String      @id @default(uuid())
+  code        String      @unique // e.g., 10101
+  name        String
+  type        AccountType
+  balance     Decimal     @default(0) @db.Decimal(15, 2)
+  
+  debitTx     Transaction[] @relation("DebitAccount")
+  creditTx    Transaction[] @relation("CreditAccount")
+}
+
+model Transaction {
+  id              String   @id @default(uuid())
+  shiftId         String?
+  shift           Shift?   @relation(fields: [shiftId], references: [id])
+  
+  debitAccountId  String
+  debitAccount    Account  @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  
+  creditAccountId String
+  creditAccount   Account  @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  
+  amount          Decimal  @db.Decimal(15, 2)
+  description     String?
+  createdAt       DateTime @default(now())
+}
+
+model NotificationQueue {
+  id        String   @id @default(uuid())
+  to        String
+  message   String
+  status    String   @default("PENDING") // PENDING, SENT, FAILED
+  retries   Int      @default(0)
+  lastError String?
+  createdAt DateTime @default(now())
+}
+

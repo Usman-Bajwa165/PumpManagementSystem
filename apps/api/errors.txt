@@ -1,0 +1,5 @@
+src/accounting/accounting.service.ts(32,21): error TS1127: Invalid character.
+src/accounting/accounting.service.ts(103,1): error TS1160: Unterminated template literal.
+src/sales/sales.service.ts(42,39): error TS1127: Invalid character.
+src/sales/sales.service.ts(42,40): error TS1136: Property assignment expected.
+src/sales/sales.service.ts(49,1): error TS1160: Unterminated template literal.
