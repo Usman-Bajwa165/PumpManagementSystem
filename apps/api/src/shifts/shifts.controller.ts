@@ -17,7 +17,7 @@ import { Role } from '@prisma/client';
 export class ShiftsController {
   constructor(private readonly shiftsService: ShiftsService) {}
 
-  @Roles(Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Post('start')
   async startShift(@Request() req: any) {
     return this.shiftsService.startShift(req.user.sub); // userId from JWT
@@ -28,7 +28,7 @@ export class ShiftsController {
     return this.shiftsService.getCurrentShift();
   }
 
-  @Roles(Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Post('end')
   async endShift(
     @Request() req: any,

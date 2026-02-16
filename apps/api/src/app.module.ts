@@ -9,11 +9,14 @@ import { SalesModule } from './sales/sales.module';
 import { ReportsModule } from './reports/reports.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { BackupModule } from './backup/backup.module';
+import { UsersModule } from './users/users.module';
+import { LoggerModule } from './logger/logger.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
+    LoggerModule,
     PrismaModule,
     AuthModule,
     InventoryModule,
@@ -23,6 +26,7 @@ import { SeedModule } from './seed/seed.module';
     ReportsModule,
     WhatsappModule,
     BackupModule,
+    UsersModule,
     SeedModule,
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),

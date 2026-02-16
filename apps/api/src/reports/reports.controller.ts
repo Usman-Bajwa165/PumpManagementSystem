@@ -48,7 +48,7 @@ export class ReportsController {
     return this.reportsService.getDailySaleSummary(shiftId);
   }
 
-  @Roles(Role.MANAGER, Role.ADMIN)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Get('dashboard-summary')
   getDashboardSummary() {
     return this.reportsService.getDashboardSummary();

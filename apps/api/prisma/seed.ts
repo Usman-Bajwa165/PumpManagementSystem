@@ -47,10 +47,18 @@ async function main() {
   await ensureUser('manager@gmail.com', 'manager123', Role.MANAGER);
   await ensureUser('operator@gmail.com', 'operator123', Role.OPERATOR);
 
-  // Minimal chart of accounts used by existing report logic.
-  await ensureAccount('10101', 'Cash', AccountType.ASSET);
+  // Complete chart of accounts
+  await ensureAccount('10101', 'Cash in Hand', AccountType.ASSET);
+  await ensureAccount('10201', 'Bank Account', AccountType.ASSET);
   await ensureAccount('10301', 'Accounts Receivable', AccountType.ASSET);
+  await ensureAccount('10401', 'Fuel Inventory', AccountType.ASSET);
+  await ensureAccount('20101', 'Accounts Payable', AccountType.LIABILITY);
+  await ensureAccount('30101', 'Owner Equity', AccountType.EQUITY);
   await ensureAccount('40101', 'Fuel Sales', AccountType.INCOME);
+  await ensureAccount('40201', 'Stock Gain', AccountType.INCOME);
+  await ensureAccount('50101', 'General Expenses', AccountType.EXPENSE);
+  await ensureAccount('50201', 'Cost of Goods Sold', AccountType.EXPENSE);
+  await ensureAccount('50301', 'Stock Loss', AccountType.EXPENSE);
 }
 
 main()

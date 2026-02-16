@@ -12,16 +12,15 @@ import {
   Clock,
 } from "lucide-react";
 import { formatPakistaniTime } from "@/lib/timezone";
+import { useToast } from "@/components/Toast";
 
 export default function BackupPage() {
   const [backups, setBackups] = useState<any[]>([]);
   const [location, setLocation] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [message, setMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  const [isCreatingFull, setIsCreatingFull] = useState(false);
+  const toast = useToast();
 
   const fetchBackups = async () => {
     try {
@@ -37,25 +36,53 @@ export default function BackupPage() {
 
   const createManualBackup = async () => {
     setIsCreating(true);
-    setMessage(null);
     try {
       const res = await api.post("/backup/manual");
       if (res.data.success) {
-        setMessage({
-          type: "success",
-          text: `Backup created: ${res.data.filename}`,
-        });
+        toast.success(
+          "Backup Created!",
+          `File: ${res.data.filename}`
+        );
         fetchBackups();
       } else {
-        setMessage({ type: "error", text: res.data.error || "Backup failed" });
+        toast.error(
+          "Backup Failed",
+          res.data.error || "Unable to create backup. Please try again."
+        );
       }
     } catch (err: any) {
-      setMessage({
-        type: "error",
-        text: err.response?.data?.message || "Failed to create backup",
-      });
+      toast.error(
+        "Backup Failed",
+        err.response?.data?.message || "An error occurred while creating backup."
+      );
     } finally {
       setIsCreating(false);
+    }
+  };
+
+  const createFullBackup = async () => {
+    setIsCreatingFull(true);
+    try {
+      const res = await api.post("/backup/full");
+      if (res.data.success) {
+        toast.success(
+          "Full Backup Created!",
+          `Complete database backup: ${res.data.filename}`
+        );
+        fetchBackups();
+      } else {
+        toast.error(
+          "Full Backup Failed",
+          res.data.error || "Unable to create full backup. Please try again."
+        );
+      }
+    } catch (err: any) {
+      toast.error(
+        "Full Backup Failed",
+        err.response?.data?.message || "An error occurred while creating full backup."
+      );
+    } finally {
+      setIsCreatingFull(false);
     }
   };
 
@@ -72,52 +99,56 @@ export default function BackupPage() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-zinc-100 tracking-tight italic flex items-center gap-3">
-              <Database className="text-blue-500" />
-              Database Backups
-            </h1>
-            <p className="text-sm text-zinc-500 mt-1">
-              Automated backups run daily at 12:00 AM and 12:00 PM (PKT)
-            </p>
+        {/* Sticky Header */}
+        <div className="sticky top-0 z-10 bg-zinc-950/95 backdrop-blur-xl border-b border-zinc-900 -mx-8 px-8 py-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-zinc-100 tracking-tight italic flex items-center gap-3">
+                <Database className="text-blue-500" />
+                Database Backups
+              </h1>
+              <p className="text-sm text-zinc-500 mt-1">
+                Automated backups run daily at 12:00 AM and 12:00 PM (PKT)
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={createManualBackup}
+                disabled={isCreating || isCreatingFull}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg shadow-blue-600/20"
+              >
+                {isCreating ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Download size={16} />
+                    Manual Backup
+                  </>
+                )}
+              </button>
+              <button
+                onClick={createFullBackup}
+                disabled={isCreating || isCreatingFull}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/20"
+              >
+                {isCreatingFull ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Database size={16} />
+                    Full Database
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-          <button
-            onClick={createManualBackup}
-            disabled={isCreating}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-800 text-white rounded-xl font-bold text-sm transition-all flex items-center gap-2 shadow-lg shadow-blue-600/20"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="animate-spin" size={18} />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Download size={18} />
-                Create Manual Backup
-              </>
-            )}
-          </button>
         </div>
-
-        {/* Message */}
-        {message && (
-          <div
-            className={`p-4 rounded-xl border ${
-              message.type === "success"
-                ? "bg-green-900/20 border-green-900/50 text-green-500"
-                : "bg-rose-900/20 border-rose-900/50 text-rose-500"
-            } flex items-center gap-3`}
-          >
-            {message.type === "success" ? (
-              <CheckCircle2 size={20} />
-            ) : (
-              <Clock size={20} />
-            )}
-            <span className="text-sm font-medium">{message.text}</span>
-          </div>
-        )}
 
         {/* Backup Location */}
         <div className="p-6 rounded-3xl border border-zinc-900 bg-zinc-900/40">
@@ -154,6 +185,9 @@ export default function BackupPage() {
             <div className="space-y-3">
               {backups.map((backup, idx) => {
                 const isAuto = backup.filename.startsWith("Auto_");
+                const isFull = backup.filename.startsWith("Full_");
+                const isFullAuto = backup.filename.startsWith("Full_Auto_");
+                const isFullMan = backup.filename.startsWith("Full_Man_");
                 const isDay = backup.filename.includes("_D.");
                 const isNight = backup.filename.includes("_N.");
 
@@ -165,7 +199,11 @@ export default function BackupPage() {
                     <div className="flex items-center gap-4">
                       <div
                         className={`p-2 rounded-lg ${
-                          isAuto
+                          isFullAuto
+                            ? "bg-purple-600/10 text-purple-500"
+                            : isFull
+                            ? "bg-emerald-600/10 text-emerald-500"
+                            : isAuto
                             ? "bg-blue-600/10 text-blue-500"
                             : "bg-amber-600/10 text-amber-500"
                         }`}
@@ -184,7 +222,31 @@ export default function BackupPage() {
                           <span className="text-xs text-zinc-500">
                             {formatFileSize(backup.size)}
                           </span>
-                          {isAuto && (
+                          {isFullAuto && (
+                            <>
+                              <span className="text-xs text-zinc-600">•</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-purple-600/20 text-purple-500">
+                                Monthly Full (Auto)
+                              </span>
+                            </>
+                          )}
+                          {isFullMan && (
+                            <>
+                              <span className="text-xs text-zinc-600">•</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-emerald-600/20 text-emerald-500">
+                                Full Database (Manual)
+                              </span>
+                            </>
+                          )}
+                          {isFull && !isFullAuto && !isFullMan && (
+                            <>
+                              <span className="text-xs text-zinc-600">•</span>
+                              <span className="text-xs px-2 py-0.5 rounded bg-emerald-600/20 text-emerald-500">
+                                Full Database
+                              </span>
+                            </>
+                          )}
+                          {isAuto && !isFull && (
                             <>
                               <span className="text-xs text-zinc-600">•</span>
                               <span
@@ -226,21 +288,35 @@ export default function BackupPage() {
               <span className="text-blue-500 mt-0.5">•</span>
               <span>
                 <strong className="text-zinc-300">Automatic backups:</strong>{" "}
-                Run daily at 12:00 AM (Night) and 12:00 PM (Day)
+                Run daily at 12:00 AM (Night) and 12:00 PM (Day) - Incremental data since last auto backup
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-blue-500 mt-0.5">•</span>
               <span>
-                <strong className="text-zinc-300">Manual backups:</strong> Can
-                be created anytime by clicking the button above
+                <strong className="text-zinc-300">Manual backups:</strong> Quick
+                incremental snapshot - Data since last auto backup
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-500 mt-0.5">•</span>
+              <span>
+                <strong className="text-zinc-300">Monthly Full (Auto):</strong> Complete
+                backup automatically on 1st of each month - ALL historical data
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-blue-500 mt-0.5">•</span>
+              <span>
+                <strong className="text-zinc-300">Full Database (Manual):</strong> Complete
+                backup with ALL historical data - Can be created anytime
               </span>
             </li>
             <li className="flex items-start gap-2">
               <span className="text-blue-500 mt-0.5">•</span>
               <span>
                 <strong className="text-zinc-300">Naming format:</strong>{" "}
-                Auto_DDMMYY_D/N or Man_DDMMYY_HHMMam/pm
+                Auto_DDMMYY_D/N, Man_DDMMYY_HH:MMam/pm, Full_Auto_MonthName-Year, Full_Man_DDMMYY_HH:MMam/pm
               </span>
             </li>
             <li className="flex items-start gap-2">

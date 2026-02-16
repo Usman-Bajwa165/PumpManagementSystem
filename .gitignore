@@ -11,6 +11,7 @@ build
 /apps/api/dist
 /apps/web/.next
 /apps/web/out
+*.tsbuildinfo
 
 # Environment
 .env
@@ -39,3 +40,24 @@ Thumbs.db
 # Database
 /data
 pgdata
+
+# Prisma
+/apps/api/prisma/migrations
+*.db
+*.db-journal
+
+# WhatsApp Session
+/apps/api/.wwebjs_auth
+/apps/api/.wwebjs_cache
+
+# Backups
+PumpBackups/
+*.pdf
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.nyc_output/

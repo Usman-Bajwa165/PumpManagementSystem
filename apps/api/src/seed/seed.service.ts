@@ -16,13 +16,33 @@ export class SeedService implements OnModuleInit {
       await this.ensureUser('manager@gmail.com', 'manager123', Role.MANAGER);
       await this.ensureUser('operator@gmail.com', 'operator123', Role.OPERATOR);
 
-      await this.ensureAccount('10101', 'Cash', AccountType.ASSET);
+      await this.ensureAccount('10101', 'Cash in Hand', AccountType.ASSET);
+      await this.ensureAccount('10201', 'Bank Account', AccountType.ASSET);
       await this.ensureAccount(
         '10301',
         'Accounts Receivable',
         AccountType.ASSET,
       );
+      await this.ensureAccount('10401', 'Fuel Inventory', AccountType.ASSET);
+      await this.ensureAccount(
+        '20101',
+        'Accounts Payable',
+        AccountType.LIABILITY,
+      );
+      await this.ensureAccount('30101', 'Owner Equity', AccountType.EQUITY);
       await this.ensureAccount('40101', 'Fuel Sales', AccountType.INCOME);
+      await this.ensureAccount('40201', 'Stock Gain', AccountType.INCOME);
+      await this.ensureAccount(
+        '50101',
+        'General Expenses',
+        AccountType.EXPENSE,
+      );
+      await this.ensureAccount(
+        '50201',
+        'Cost of Goods Sold',
+        AccountType.EXPENSE,
+      );
+      await this.ensureAccount('50301', 'Stock Loss', AccountType.EXPENSE);
 
       this.logger.log('Conditional seed finished.');
     } catch (err) {

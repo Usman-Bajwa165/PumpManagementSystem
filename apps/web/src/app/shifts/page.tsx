@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
 import { Play, Square, AlertCircle, Loader2, Droplet } from "lucide-react";
+import { useToast } from "@/components/Toast";
 
 interface NozzleReading {
   nozzleId: string;
@@ -28,6 +29,7 @@ export default function ShiftsPage() {
     Record<string, number>
   >({});
   const [error, setError] = useState("");
+  const toast = useToast();
 
   const fetchCurrentShift = async () => {
     try {
@@ -50,8 +52,11 @@ export default function ShiftsPage() {
     try {
       await api.post("/shifts/start");
       await fetchCurrentShift();
+      toast.success("Shift Started", "New shift has been opened successfully.");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to start shift");
+      const errorMsg = err.response?.data?.message || "Failed to start shift";
+      setError(errorMsg);
+      toast.error("Failed to Start Shift", errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -68,7 +73,9 @@ export default function ShiftsPage() {
     );
 
     if (readings.length < (currentShift?.readings?.length || 0)) {
-      setError("Please provide closing readings for all nozzles.");
+      const errorMsg = "Please provide closing readings for all nozzles.";
+      setError(errorMsg);
+      toast.warning("Incomplete Readings", errorMsg);
       setIsSubmitting(false);
       return;
     }
@@ -77,8 +84,11 @@ export default function ShiftsPage() {
       await api.post("/shifts/end", { readings });
       setCurrentShift(null);
       setClosingReadings({});
+      toast.success("Shift Closed", "Shift ended and sales calculated successfully.");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to end shift");
+      const errorMsg = err.response?.data?.message || "Failed to end shift";
+      setError(errorMsg);
+      toast.error("Failed to End Shift", errorMsg);
     } finally {
       setIsSubmitting(false);
     }

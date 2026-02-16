@@ -17,6 +17,12 @@ export class BackupController {
   }
 
   @Roles(Role.ADMIN, Role.MANAGER)
+  @Post('full')
+  async createFullBackup() {
+    return this.backupService.performFullBackup();
+  }
+
+  @Roles(Role.ADMIN, Role.MANAGER)
   @Get('list')
   listBackups() {
     return {

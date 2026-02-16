@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
 import { MessageSquare, Loader2, CheckCircle2, XCircle, Settings } from "lucide-react";
+import { useToast } from "@/components/Toast";
 
 export default function WhatsAppPage() {
   const [status, setStatus] = useState<any>(null);
@@ -24,6 +25,7 @@ export default function WhatsAppPage() {
   });
   const [isSaving, setIsSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const toast = useToast();
 
   const fetchStatus = async () => {
     try {
@@ -47,7 +49,10 @@ export default function WhatsAppPage() {
     // Validate: At least one payment method must be checked if sales notifications are enabled
     if (preferences.salesNotifications) {
       if (!preferences.notifyCash && !preferences.notifyCard && !preferences.notifyOnline && !preferences.notifyCredit) {
-        alert("Please enable at least one payment method for sales notifications!");
+        toast.warning(
+          "Validation Error",
+          "Please enable at least one payment method for sales notifications!"
+        );
         return;
       }
     }
@@ -55,10 +60,16 @@ export default function WhatsAppPage() {
     setIsSaving(true);
     try {
       await api.post("/whatsapp/preferences", preferences);
-      alert("Notification preferences saved!");
+      toast.success(
+        "Preferences Saved!",
+        "Your notification preferences have been updated successfully."
+      );
     } catch (err) {
       console.error(err);
-      alert("Failed to save preferences");
+      toast.error(
+        "Save Failed",
+        "Unable to save preferences. Please try again."
+      );
     } finally {
       setIsSaving(false);
     }
@@ -66,7 +77,7 @@ export default function WhatsAppPage() {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 20000);
+    const interval = setInterval(fetchStatus, 60000); // 1 minute
     return () => clearInterval(interval);
   }, []);
 
@@ -126,6 +137,16 @@ export default function WhatsAppPage() {
                           Failed
                         </span>
                       </>
+                    ) : status?.status === "authenticated" || status?.status === "loading" ? (
+                      <>
+                        <Loader2
+                          className="animate-spin text-blue-500"
+                          size={24}
+                        />
+                        <span className="text-xl font-bold text-blue-500">
+                          Logging in...
+                        </span>
+                      </>
                     ) : (
                       <>
                         <Loader2
@@ -163,7 +184,7 @@ export default function WhatsAppPage() {
 
                 <div className="flex items-center justify-center gap-2 text-xs text-zinc-500">
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  QR code refreshes every 20 seconds
+                  QR code refreshes every 1 minute
                 </div>
               </div>
             )}

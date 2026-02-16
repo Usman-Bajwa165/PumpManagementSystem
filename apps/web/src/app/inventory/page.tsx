@@ -50,9 +50,11 @@ export default function InventoryPage() {
   const fetchData = async () => {
     try {
       const res = await api.get("/inventory/tanks");
+      console.log("Tanks fetched:", res.data);
       setTanks(res.data as Tank[]);
     } catch (err) {
       console.error("Failed to fetch tanks", err);
+      setError("Failed to load tanks. Please check if tanks are configured.");
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +166,16 @@ export default function InventoryPage() {
         )}
 
         {/* Tank Visualization */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {tanks.length === 0 ? (
+          <div className="p-12 rounded-3xl border border-zinc-900 bg-zinc-900/30 text-center">
+            <Package className="mx-auto text-zinc-700 mb-4" size={64} />
+            <h3 className="text-xl font-bold text-zinc-300 mb-2">No Tanks Configured</h3>
+            <p className="text-sm text-zinc-500">
+              Please configure products and tanks in the system first.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {tanks.map((tank) => {
             const percentage = (tank.currentStock / tank.capacity) * 100;
             const isLow = percentage < 20;
@@ -236,6 +247,7 @@ export default function InventoryPage() {
             );
           })}
         </div>
+        )}
 
         {/* Purchase Modal */}
         {showPurchaseModal && (

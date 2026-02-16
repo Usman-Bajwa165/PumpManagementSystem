@@ -11,7 +11,7 @@ import { Role } from '@prisma/client';
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
-  @Roles(Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Post()
   createSale(@Request() req: any, @Body() dto: CreateSaleDto) {
     return this.salesService.createSale(req.user.sub, dto);
