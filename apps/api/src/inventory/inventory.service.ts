@@ -23,7 +23,10 @@ export class InventoryService {
   }
 
   async getProducts() {
-    return this.prisma.product.findMany({ include: { tanks: true } });
+    return this.prisma.product.findMany({ 
+      include: { tanks: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   // Tanks
@@ -34,6 +37,7 @@ export class InventoryService {
   async getTanks() {
     return this.prisma.tank.findMany({
       include: { product: true, nozzles: true },
+      orderBy: { name: 'asc' },
     });
   }
 
@@ -43,7 +47,16 @@ export class InventoryService {
   }
 
   async getNozzles() {
-    return this.prisma.nozzle.findMany({ include: { tank: true } });
+    return this.prisma.nozzle.findMany({ 
+      include: { 
+        tank: { 
+          include: { 
+            product: true 
+          } 
+        } 
+      },
+      orderBy: { name: 'asc' },
+    });
   }
 
   // Purchase / Stock In
@@ -53,11 +66,15 @@ export class InventoryService {
     });
     if (!tank) throw new BadRequestException('Tank not found');
 
+    const oldStock = Number(tank.currentStock);
+
     // Update Stock
     await this.prisma.tank.update({
       where: { id: dto.tankId },
       data: { currentStock: { increment: dto.quantity } },
     });
+
+    const newStock = oldStock + dto.quantity;
 
     // Accounting Entry:
     // Debit: Fuel Inventory (Asset)
@@ -70,9 +87,26 @@ export class InventoryService {
       description: `Purchase ${dto.quantity}L for ${tank.name} from ${dto.supplier}`,
     });
 
+    // Get user info
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const prefs = await this.prisma.notificationPreferences.findFirst();
+    
+    if (prefs?.stockNotifications) {
+      this.whatsappService
+        .notifyStockChange(prefs.phoneNumber, {
+          action: 'Purchased',
+          user: user?.username || 'Unknown',
+          quantity: dto.quantity,
+          amount: dto.cost,
+          available: newStock,
+          tank: tank.name,
+        })
+        .catch(() => {});
+    }
+
     return {
       message: 'Purchase recorded successfully',
-      newStock: Number(tank.currentStock) + dto.quantity,
+      newStock,
     };
   }
 
@@ -128,10 +162,35 @@ export class InventoryService {
       });
     }
 
-    // Proactive: Notify Manager of Variance
-    if (variance !== 0) {
-      const msg = `⚠️ *Stock Variance Alert* ⚠️\nTank: ${tank.name}\nVariance: ${variance}L\nAmount: Rs. ${varianceAmount}\nStatus: ${variance < 0 ? 'Shortage' : 'Excess'}`;
-      this.whatsappService.sendMessage('923000000000', msg).catch(() => {});
+    // Get user info
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    const prefs = await this.prisma.notificationPreferences.findFirst();
+
+    // Notify of stock change
+    if (prefs?.stockNotifications) {
+      this.whatsappService
+        .notifyStockChange(prefs.phoneNumber, {
+          action: 'Adjusted',
+          user: user?.username || 'Unknown',
+          quantity: Math.abs(variance),
+          amount: varianceAmount,
+          available: physicalStock,
+          tank: tank.name,
+        })
+        .catch(() => {});
+    }
+
+    // Check for low fuel after adjustment
+    const percentage = (physicalStock / Number(tank.capacity)) * 100;
+    if (prefs?.inventoryNotifications && percentage < prefs.lowFuelThreshold) {
+      this.whatsappService.notifyLowFuel(
+        prefs.phoneNumber,
+        tank.name,
+        tank.product.name,
+        physicalStock,
+        Number(tank.capacity),
+        percentage,
+      ).catch(() => {});
     }
 
     return {
@@ -139,5 +198,24 @@ export class InventoryService {
       variance,
       physicalStock,
     };
+  }
+
+  async deleteProduct(id: string) {
+    return this.prisma.product.delete({ where: { id } });
+  }
+
+  async updateProduct(id: string, price: number) {
+    return this.prisma.product.update({
+      where: { id },
+      data: { price },
+    });
+  }
+
+  async deleteTank(id: string) {
+    return this.prisma.tank.delete({ where: { id } });
+  }
+
+  async deleteNozzle(id: string) {
+    return this.prisma.nozzle.delete({ where: { id } });
   }
 }

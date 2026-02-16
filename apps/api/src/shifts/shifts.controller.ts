@@ -20,12 +20,23 @@ export class ShiftsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Post('start')
   async startShift(@Request() req: any) {
-    return this.shiftsService.startShift(req.user.sub); // userId from JWT
+    return this.shiftsService.startShift(req.user.sub);
   }
 
   @Get('current')
   async getCurrentShift() {
     return this.shiftsService.getCurrentShift();
+  }
+
+  @Get('auto-close-status')
+  async getAutoCloseStatus() {
+    return this.shiftsService.getAutoCloseStatus();
+  }
+
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @Post('toggle-auto-close')
+  async toggleAutoClose(@Body() body: { enabled: boolean }) {
+    return this.shiftsService.toggleAutoClose(body.enabled);
   }
 
   @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)

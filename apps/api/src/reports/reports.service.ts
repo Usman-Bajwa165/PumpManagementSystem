@@ -195,15 +195,18 @@ export class ReportsService {
       orderBy: { startTime: 'desc' },
     });
 
-    // Today's Credit Sales
-    const creditSales = await this.prisma.transaction.findMany({
+    // Today's Credit (only credit given today, minus payments for today's credit)
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    
+    const todaysCreditRecords = await this.prisma.creditRecord.findMany({
       where: {
-        debitAccount: { name: 'Accounts Receivable' },
-        createdAt: { gte: today },
+        creditDate: { gte: today, lt: tomorrow },
       },
     });
-    const totalCredit = creditSales.reduce(
-      (sum, s) => sum + Number(s.amount),
+    
+    const totalCredit = todaysCreditRecords.reduce(
+      (sum, r) => sum + Number(r.remainingAmount),
       0,
     );
 

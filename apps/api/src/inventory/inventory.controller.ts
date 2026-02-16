@@ -3,6 +3,9 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
+  Patch,
+  Param,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -65,5 +68,29 @@ export class InventoryController {
   @Post('dip')
   recordDip(@Request() req: any, @Body() dto: CreateTankDipDto) {
     return this.inventoryService.recordDip(req.user.sub, dto);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Delete('products/:id')
+  deleteProduct(@Param('id') id: string) {
+    return this.inventoryService.deleteProduct(id);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Patch('products/:id')
+  updateProduct(@Param('id') id: string, @Body() dto: { price: number }) {
+    return this.inventoryService.updateProduct(id, dto.price);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Delete('tanks/:id')
+  deleteTank(@Param('id') id: string) {
+    return this.inventoryService.deleteTank(id);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Delete('nozzles/:id')
+  deleteNozzle(@Param('id') id: string) {
+    return this.inventoryService.deleteNozzle(id);
   }
 }

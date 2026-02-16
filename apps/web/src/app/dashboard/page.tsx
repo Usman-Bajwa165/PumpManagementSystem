@@ -33,6 +33,23 @@ export default function DashboardPage() {
     fetchSummary();
   }, []);
 
+  const formatShiftTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const hours = date.getHours();
+    const period = hours >= 12 ? "Night" : "Morning";
+    const formattedDate = date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+    const formattedTime = date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return { date: formattedDate, time: formattedTime, period };
+  };
+
   const stats = [
     {
       name: "Today Sales",
@@ -44,11 +61,11 @@ export default function DashboardPage() {
     {
       name: "Active Shift",
       value: summary?.activeShift
-        ? `Shift #${summary.activeShift.id.slice(-4)}`
+        ? `${formatShiftTime(summary.activeShift.startedAt).date} - ${formatShiftTime(summary.activeShift.startedAt).period}`
         : "No Active Shift",
       icon: Fuel,
       change: summary?.activeShift
-        ? `Started at ${new Date(summary.activeShift.startedAt).toLocaleTimeString()}`
+        ? `Started at ${formatShiftTime(summary.activeShift.startedAt).time}`
         : "Station Closed",
       trend: "neutral",
     },

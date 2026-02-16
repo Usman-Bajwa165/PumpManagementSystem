@@ -49,6 +49,9 @@ model Shift {
   closerId  String?
   closer    User?    @relation("ShiftCloser", fields: [closerId], references: [id])
 
+  startReadings String? // JSON string of nozzle readings at start
+  endReadings   String? // JSON string of nozzle readings at end
+
   transactions Transaction[]
   readings     NozzleReading[]
   
@@ -119,6 +122,35 @@ model Account {
   creditTx    Transaction[] @relation("CreditAccount")
 }
 
+model PaymentAccount {
+  id          String   @id @default(uuid())
+  name        String
+  type        String   // CARD, ONLINE
+  accountNumber String?
+  createdAt   DateTime @default(now())
+}
+
+model CreditCustomer {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  vehicleNumber String?
+  totalCredit   Decimal  @default(0) @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  creditRecords CreditRecord[]
+}
+
+model CreditRecord {
+  id              String   @id @default(uuid())
+  customerId      String
+  customer        CreditCustomer @relation(fields: [customerId], references: [id])
+  amount          Decimal  @db.Decimal(15, 2)
+  remainingAmount Decimal  @db.Decimal(15, 2)
+  creditDate      DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
 model Transaction {
   id              String   @id @default(uuid())
   shiftId         String?
@@ -153,6 +185,7 @@ model NotificationPreferences {
   salesNotifications    Boolean @default(true)
   shiftNotifications    Boolean @default(true)
   inventoryNotifications Boolean @default(true)
+  stockNotifications    Boolean @default(true)
   
   // Sales notification sub-options (only if salesNotifications is true)
   notifyCash        Boolean @default(true)
@@ -165,6 +198,12 @@ model NotificationPreferences {
   minCardAmount     Decimal  @default(0) @db.Decimal(10, 2)
   minOnlineAmount   Decimal  @default(0) @db.Decimal(10, 2)
   minCreditAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  
+  // Auto shift management
+  autoCloseShift    Boolean @default(false)
+  
+  // Low fuel alert threshold
+  lowFuelThreshold  Int     @default(20) // Percentage
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

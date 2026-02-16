@@ -152,7 +152,11 @@ export default function UsersPage() {
                         )}
                       </p>
                       <p className="text-xs text-zinc-500">
-                        Created: {new Date(u.createdAt).toLocaleDateString()}
+                        Created: {new Date(u.createdAt).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
                   </div>

@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { LoggerModule } from './logger/logger.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SeedModule } from './seed/seed.module';
+import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SeedModule } from './seed/seed.module';
     BackupModule,
     UsersModule,
     SeedModule,
+    PaymentAccountsModule,
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
   ],

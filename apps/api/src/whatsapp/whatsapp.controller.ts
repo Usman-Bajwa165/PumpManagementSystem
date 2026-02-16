@@ -16,8 +16,10 @@ export class WhatsappController {
 
   @Roles(Role.ADMIN, Role.MANAGER)
   @Get('status')
-  getStatus() {
-    return this.whatsappService.getStatus();
+  async getStatus() {
+    const status = this.whatsappService.getStatus();
+    const connectedNumber = await this.whatsappService.getConnectedNumber();
+    return { ...status, connectedNumber };
   }
 
   @Roles(Role.ADMIN, Role.MANAGER)
@@ -29,16 +31,19 @@ export class WhatsappController {
   @Roles(Role.ADMIN, Role.MANAGER)
   @Post('preferences')
   async savePreferences(@Body() data: any) {
+    const phoneNumber = data.phoneNumber || '923000000000';
     const existing = await this.prisma.notificationPreferences.findFirst();
     
     if (existing) {
       return this.prisma.notificationPreferences.update({
         where: { id: existing.id },
-        data,
+        data: { ...data, phoneNumber },
       });
     }
     
-    return this.prisma.notificationPreferences.create({ data });
+    return this.prisma.notificationPreferences.create({ 
+      data: { ...data, phoneNumber } 
+    });
   }
 
   @Roles(Role.ADMIN, Role.MANAGER)

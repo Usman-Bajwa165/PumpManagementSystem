@@ -62,7 +62,7 @@ export default function DashboardLayout({
         </div>
         
         {/* Content */}
-        <div className="p-8">
+        <div className="p-4">
           {children}
         </div>
       </main>

@@ -46,6 +46,8 @@ export default function InventoryPage() {
   const [cost, setCost] = useState("");
   const [supplier, setSupplier] = useState("");
   const [dipReading, setDipReading] = useState("");
+  const [capacityWarning, setCapacityWarning] = useState("");
+  const [pricePerLiter, setPricePerLiter] = useState(0);
 
   const fetchData = async () => {
     try {
@@ -68,6 +70,15 @@ export default function InventoryPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError("");
+    const tank = tanks.find(t => t.id === selectedTank);
+    if (tank) {
+      const newTotal = tank.currentStock + Number(quantity);
+      if (newTotal > tank.capacity) {
+        setError(`Capacity: ${tank.capacity}L, Adding: ${quantity}L, Total: ${newTotal}L. Stock cannot exceed tank capacity!`);
+        setIsSubmitting(false);
+        return;
+      }
+    }
     try {
       await api.post("/inventory/purchase", {
         tankId: selectedTank,
@@ -77,6 +88,7 @@ export default function InventoryPage() {
       });
       setSuccess("Purchase recorded and stock updated!");
       setShowPurchaseModal(false);
+      setCapacityWarning("");
       fetchData();
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to record purchase");
@@ -89,6 +101,12 @@ export default function InventoryPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError("");
+    const tank = tanks.find(t => t.id === selectedTank);
+    if (tank && Number(dipReading) > tank.capacity) {
+      setError(`Capacity: ${tank.capacity}L, Dip Reading: ${dipReading}L. Reading cannot exceed tank capacity!`);
+      setIsSubmitting(false);
+      return;
+    }
     try {
       const res = await api.post("/inventory/dip", {
         tankId: selectedTank,
@@ -96,6 +114,7 @@ export default function InventoryPage() {
       });
       setSuccess(`Dip recorded! Variance: ${(res.data as any).variance}L`);
       setShowDipModal(false);
+      setCapacityWarning("");
       fetchData();
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to record dip");
@@ -131,6 +150,7 @@ export default function InventoryPage() {
               onClick={() => {
                 setSelectedTank("");
                 setDipReading("");
+                setCapacityWarning("");
                 setShowDipModal(true);
                 setSuccess("");
                 setError("");
@@ -146,6 +166,7 @@ export default function InventoryPage() {
                 setQuantity("");
                 setCost("");
                 setSupplier("");
+                setCapacityWarning("");
                 setShowPurchaseModal(true);
                 setSuccess("");
                 setError("");
@@ -265,12 +286,18 @@ export default function InventoryPage() {
                     required
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none"
                     value={selectedTank}
-                    onChange={(e) => setSelectedTank(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedTank(e.target.value);
+                      const tank = tanks.find(t => t.id === e.target.value);
+                      if (tank?.product?.price) {
+                        setPricePerLiter(Number(tank.product.price));
+                      }
+                    }}
                   >
                     <option value="">Select Tank</option>
                     {tanks.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.name} ({t.product?.name})
+                        {t.name} ({t.product?.name}) - Rs. {t.product?.price}/L
                       </option>
                     ))}
                   </select>
@@ -286,8 +313,27 @@ export default function InventoryPage() {
                       placeholder="0"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none"
                       value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
+                      onChange={(e) => {
+                        setQuantity(e.target.value);
+                        const tank = tanks.find(t => t.id === selectedTank);
+                        if (tank && e.target.value) {
+                          if (pricePerLiter > 0) {
+                            setCost((Number(e.target.value) * pricePerLiter).toFixed(2));
+                          }
+                          const newTotal = tank.currentStock + Number(e.target.value);
+                          if (newTotal > tank.capacity) {
+                            setCapacityWarning(`Capacity: ${tank.capacity}L, Available: ${tank.currentStock}L, Purchasing: ${e.target.value}L, Total: ${newTotal}L. Cannot exceed capacity!`);
+                          } else {
+                            setCapacityWarning("");
+                          }
+                        } else {
+                          setCapacityWarning("");
+                        }
+                      }}
                     />
+                    {capacityWarning && (
+                      <p className="text-xs text-orange-400 mt-1 font-semibold">{capacityWarning}</p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-zinc-500 uppercase">
@@ -299,7 +345,22 @@ export default function InventoryPage() {
                       placeholder="0"
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none"
                       value={cost}
-                      onChange={(e) => setCost(e.target.value)}
+                      onChange={(e) => {
+                        setCost(e.target.value);
+                        const tank = tanks.find(t => t.id === selectedTank);
+                        if (pricePerLiter > 0 && e.target.value && tank) {
+                          const calculatedQty = Number(e.target.value) / pricePerLiter;
+                          setQuantity(calculatedQty.toFixed(2));
+                          const newTotal = tank.currentStock + calculatedQty;
+                          if (newTotal > tank.capacity) {
+                            setCapacityWarning(`Capacity: ${tank.capacity}L, Available: ${tank.currentStock}L, Purchasing: ${calculatedQty.toFixed(2)}L, Total: ${newTotal.toFixed(2)}L. Cannot exceed capacity!`);
+                          } else {
+                            setCapacityWarning("");
+                          }
+                        } else {
+                          setCapacityWarning("");
+                        }
+                      }}
                     />
                   </div>
                 </div>
@@ -383,8 +444,19 @@ export default function InventoryPage() {
                     placeholder="Enter current volume"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 outline-none h-16 text-2xl font-black text-center"
                     value={dipReading}
-                    onChange={(e) => setDipReading(e.target.value)}
+                    onChange={(e) => {
+                      setDipReading(e.target.value);
+                      const tank = tanks.find(t => t.id === selectedTank);
+                      if (tank && Number(e.target.value) > tank.capacity) {
+                        setCapacityWarning(`Capacity: ${tank.capacity}L, Reading: ${e.target.value}L. Cannot exceed capacity!`);
+                      } else {
+                        setCapacityWarning("");
+                      }
+                    }}
                   />
+                  {capacityWarning && (
+                    <p className="text-xs text-orange-400 mt-1 font-semibold text-center">{capacityWarning}</p>
+                  )}
                 </div>
 
                 {error && <p className="text-red-500 text-sm mt-2">{error}</p>}

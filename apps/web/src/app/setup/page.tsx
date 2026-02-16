@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
-import { Settings, Plus, Loader2 } from "lucide-react";
+import { Settings, Plus, Loader2, Trash2 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -21,6 +21,48 @@ export default function SetupPage() {
   const [productForm, setProductForm] = useState({ name: "", price: "" });
   const [tankForm, setTankForm] = useState({ name: "", capacity: "", productId: "", currentStock: "" });
   const [nozzleForm, setNozzleForm] = useState({ name: "", tankId: "", lastReading: "" });
+  const [stockWarning, setStockWarning] = useState("");
+  const [editingProduct, setEditingProduct] = useState<string | null>(null);
+  const [editPrice, setEditPrice] = useState("");
+
+  const productNameRef = useRef<HTMLInputElement>(null);
+  const productPriceRef = useRef<HTMLInputElement>(null);
+  const tankNameRef = useRef<HTMLInputElement>(null);
+  const tankProductRef = useRef<HTMLSelectElement>(null);
+  const tankCapacityRef = useRef<HTMLInputElement>(null);
+  const tankStockRef = useRef<HTMLInputElement>(null);
+  const nozzleNameRef = useRef<HTMLInputElement>(null);
+  const nozzleTankRef = useRef<HTMLSelectElement>(null);
+  const nozzleReadingRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (activeTab === "products") {
+      productNameRef.current?.focus();
+    } else if (activeTab === "tanks") {
+      tankNameRef.current?.focus();
+    } else if (activeTab === "nozzles") {
+      nozzleNameRef.current?.focus();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    // Focus first field on initial load
+    productNameRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        const tabs = ["products", "tanks", "nozzles"];
+        const currentIndex = tabs.indexOf(activeTab);
+        const nextIndex = (currentIndex + 1) % tabs.length;
+        setActiveTab(tabs[nextIndex]);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab]);
 
   useEffect(() => {
     if (user?.role !== "ADMIN" && user?.role !== "MANAGER") {
@@ -57,6 +99,7 @@ export default function SetupPage() {
       toast.success("Product Created", `${productForm.name} added successfully`);
       setProductForm({ name: "", price: "" });
       fetchData();
+      productNameRef.current?.focus();
     } catch (err: any) {
       toast.error("Creation Failed", err.response?.data?.message || "Unable to create product");
     }
@@ -64,16 +107,24 @@ export default function SetupPage() {
 
   const handleCreateTank = async (e: React.FormEvent) => {
     e.preventDefault();
+    const capacity = parseFloat(tankForm.capacity);
+    const stock = parseFloat(tankForm.currentStock);
+    if (stock > capacity) {
+      toast.warning("Stock Exceeds Capacity", `Capacity: ${capacity}L, Stock: ${stock}L. Stock cannot exceed capacity.`);
+      return;
+    }
     try {
       await api.post("/inventory/tanks", {
         name: tankForm.name,
-        capacity: parseFloat(tankForm.capacity),
-        currentStock: parseFloat(tankForm.currentStock),
+        capacity,
+        currentStock: stock,
         productId: tankForm.productId,
       });
       toast.success("Tank Created", `${tankForm.name} added successfully`);
       setTankForm({ name: "", capacity: "", productId: "", currentStock: "" });
+      setStockWarning("");
       fetchData();
+      tankNameRef.current?.focus();
     } catch (err: any) {
       toast.error("Creation Failed", err.response?.data?.message || "Unable to create tank");
     }
@@ -90,8 +141,54 @@ export default function SetupPage() {
       toast.success("Nozzle Created", `${nozzleForm.name} added successfully`);
       setNozzleForm({ name: "", tankId: "", lastReading: "" });
       fetchData();
+      nozzleNameRef.current?.focus();
     } catch (err: any) {
       toast.error("Creation Failed", err.response?.data?.message || "Unable to create nozzle");
+    }
+  };
+
+  const handleDeleteProduct = async (id: string, name: string) => {
+    if (!confirm(`Delete product "${name}"?`)) return;
+    try {
+      await api.delete(`/inventory/products/${id}`);
+      toast.success("Deleted", `${name} removed`);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to delete");
+    }
+  };
+
+  const handleDeleteTank = async (id: string, name: string) => {
+    if (!confirm(`Delete tank "${name}"?`)) return;
+    try {
+      await api.delete(`/inventory/tanks/${id}`);
+      toast.success("Deleted", `${name} removed`);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to delete");
+    }
+  };
+
+  const handleDeleteNozzle = async (id: string, name: string) => {
+    if (!confirm(`Delete nozzle "${name}"?`)) return;
+    try {
+      await api.delete(`/inventory/nozzles/${id}`);
+      toast.success("Deleted", `${name} removed`);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to delete");
+    }
+  };
+
+  const handleUpdatePrice = async (id: string, name: string) => {
+    try {
+      await api.patch(`/inventory/products/${id}`, { price: parseFloat(editPrice) });
+      toast.success("Price Updated", `${name} price updated to Rs. ${editPrice}`);
+      setEditingProduct(null);
+      setEditPrice("");
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to update price");
     }
   };
 
@@ -118,7 +215,7 @@ export default function SetupPage() {
             System Setup
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-500 mt-1">
-            Configure products, tanks, and nozzles
+            Configure products, tanks, and nozzles. Note: Nozzle readings are managed per shift, not here.
           </p>
         </div>
 
@@ -148,10 +245,17 @@ export default function SetupPage() {
                     Product Name
                   </label>
                   <input
+                    ref={productNameRef}
                     type="text"
                     required
                     value={productForm.name}
                     onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        productPriceRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="e.g., Petrol, Diesel, Hi-Octane"
                   />
@@ -161,6 +265,7 @@ export default function SetupPage() {
                     Price per Liter (Rs.)
                   </label>
                   <input
+                    ref={productPriceRef}
                     type="number"
                     step="0.01"
                     required
@@ -189,10 +294,60 @@ export default function SetupPage() {
                   products.map((p) => (
                     <div
                       key={p.id}
-                      className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
-                      <p className="font-bold text-zinc-900 dark:text-zinc-100">{p.name}</p>
-                      <p className="text-sm text-zinc-500">Rs. {p.price}/L</p>
+                      <div className="flex-1">
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{p.name}</p>
+                        {editingProduct === p.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(e.target.value)}
+                              className="w-24 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleUpdatePrice(p.id, p.name)}
+                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingProduct(null);
+                                setEditPrice("");
+                              }}
+                              className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-zinc-500">Rs. {p.price}/L</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {!editingProduct && (
+                          <button
+                            onClick={() => {
+                              setEditingProduct(p.id);
+                              setEditPrice(p.price.toString());
+                            }}
+                            className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteProduct(p.id, p.name)}
+                          className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                          disabled={editingProduct === p.id}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -211,10 +366,17 @@ export default function SetupPage() {
                     Tank Name
                   </label>
                   <input
+                    ref={tankNameRef}
                     type="text"
                     required
                     value={tankForm.name}
                     onChange={(e) => setTankForm({ ...tankForm, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        tankProductRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="e.g., Tank A, Tank 1"
                   />
@@ -224,9 +386,16 @@ export default function SetupPage() {
                     Product
                   </label>
                   <select
+                    ref={tankProductRef}
                     required
                     value={tankForm.productId}
                     onChange={(e) => setTankForm({ ...tankForm, productId: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && tankForm.productId) {
+                        e.preventDefault();
+                        tankCapacityRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   >
                     <option value="">Select Product</option>
@@ -242,10 +411,17 @@ export default function SetupPage() {
                     Capacity (Liters)
                   </label>
                   <input
+                    ref={tankCapacityRef}
                     type="number"
                     required
                     value={tankForm.capacity}
                     onChange={(e) => setTankForm({ ...tankForm, capacity: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        tankStockRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="0"
                   />
@@ -255,13 +431,26 @@ export default function SetupPage() {
                     Current Stock (Liters)
                   </label>
                   <input
+                    ref={tankStockRef}
                     type="number"
                     required
                     value={tankForm.currentStock}
-                    onChange={(e) => setTankForm({ ...tankForm, currentStock: e.target.value })}
+                    onChange={(e) => {
+                      setTankForm({ ...tankForm, currentStock: e.target.value });
+                      const capacity = parseFloat(tankForm.capacity);
+                      const stock = parseFloat(e.target.value);
+                      if (stock > capacity && capacity > 0) {
+                        setStockWarning(`Capacity: ${capacity}L, Stock: ${stock}L, Total: ${stock}L. Stock cannot exceed capacity!`);
+                      } else {
+                        setStockWarning("");
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="0"
                   />
+                  {stockWarning && (
+                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-semibold">{stockWarning}</p>
+                  )}
                 </div>
                 <button
                   type="submit"
@@ -282,12 +471,20 @@ export default function SetupPage() {
                   tanks.map((t) => (
                     <div
                       key={t.id}
-                      className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
-                      <p className="font-bold text-zinc-900 dark:text-zinc-100">{t.name}</p>
-                      <p className="text-sm text-zinc-500">
-                        {t.product?.name} | {t.currentStock}/{t.capacity}L
-                      </p>
+                      <div>
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{t.name}</p>
+                        <p className="text-sm text-zinc-500">
+                          {t.product?.name} | {t.currentStock}/{t.capacity}L
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteTank(t.id, t.name)}
+                        className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   ))
                 )}
@@ -306,10 +503,17 @@ export default function SetupPage() {
                     Nozzle Name
                   </label>
                   <input
+                    ref={nozzleNameRef}
                     type="text"
                     required
                     value={nozzleForm.name}
                     onChange={(e) => setNozzleForm({ ...nozzleForm, name: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        nozzleTankRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="e.g., Nozzle 1, Pump A"
                   />
@@ -319,9 +523,16 @@ export default function SetupPage() {
                     Tank
                   </label>
                   <select
+                    ref={nozzleTankRef}
                     required
                     value={nozzleForm.tankId}
                     onChange={(e) => setNozzleForm({ ...nozzleForm, tankId: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && nozzleForm.tankId) {
+                        e.preventDefault();
+                        nozzleReadingRef.current?.focus();
+                      }
+                    }}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                   >
                     <option value="">Select Tank</option>
@@ -337,6 +548,7 @@ export default function SetupPage() {
                     Initial Reading
                   </label>
                   <input
+                    ref={nozzleReadingRef}
                     type="number"
                     step="0.01"
                     required
@@ -365,12 +577,20 @@ export default function SetupPage() {
                   nozzles.map((n) => (
                     <div
                       key={n.id}
-                      className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
-                      <p className="font-bold text-zinc-900 dark:text-zinc-100">{n.name}</p>
-                      <p className="text-sm text-zinc-500">
-                        {n.tank?.name} | Reading: {n.lastReading}
-                      </p>
+                      <div>
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{n.name}</p>
+                        <p className="text-sm text-zinc-500">
+                          {n.tank?.name} | Reading: {n.lastReading}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteNozzle(n.id, n.name)}
+                        className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   ))
                 )}

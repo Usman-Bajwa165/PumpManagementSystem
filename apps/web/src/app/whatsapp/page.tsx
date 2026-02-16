@@ -10,10 +10,13 @@ export default function WhatsAppPage() {
   const [status, setStatus] = useState<any>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [connectedNumber, setConnectedNumber] = useState("");
   const [preferences, setPreferences] = useState<any>({
+    phoneNumber: "",
     salesNotifications: true,
     shiftNotifications: true,
     inventoryNotifications: true,
+    stockNotifications: true,
     notifyCash: true,
     notifyCard: true,
     notifyOnline: true,
@@ -22,6 +25,7 @@ export default function WhatsAppPage() {
     minCardAmount: 0,
     minOnlineAmount: 0,
     minCreditAmount: 0,
+    lowFuelThreshold: 20,
   });
   const [isSaving, setIsSaving] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,6 +35,9 @@ export default function WhatsAppPage() {
     try {
       const res = await api.get("/whatsapp/status");
       setStatus(res.data);
+      if (res.data.connectedNumber) {
+        setConnectedNumber(res.data.connectedNumber);
+      }
 
       if (!res.data.isReady && res.data.hasQR) {
         const qrRes = await api.get("/whatsapp/qr");
@@ -77,9 +84,21 @@ export default function WhatsAppPage() {
 
   useEffect(() => {
     fetchStatus();
+    fetchPreferences();
     const interval = setInterval(fetchStatus, 60000); // 1 minute
     return () => clearInterval(interval);
   }, []);
+
+  const fetchPreferences = async () => {
+    try {
+      const res = await api.get("/whatsapp/preferences");
+      if (res.data) {
+        setPreferences(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch preferences", err);
+    }
+  };
 
   useEffect(() => {
     if (qrCode && canvasRef.current) {
@@ -215,6 +234,41 @@ export default function WhatsAppPage() {
                   </div>
 
                   <div className="space-y-4">
+                    {/* Connected Number Info */}
+                    <div className="p-4 rounded-xl bg-green-900/10 border border-green-900/20">
+                      <p className="text-sm font-bold text-green-500 mb-2">Connected WhatsApp Number (FROM)</p>
+                      <p className="text-lg font-mono text-zinc-100">+{connectedNumber}</p>
+                      <p className="text-xs text-zinc-500 mt-1">Messages will be sent from this number</p>
+                    </div>
+
+                    {/* Notification Phone Number */}
+                    <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
+                      <label className="block text-zinc-100 font-medium mb-2">Send Notifications To (TO)</label>
+                      <input
+                        type="text"
+                        value={preferences.phoneNumber || connectedNumber}
+                        onChange={(e) => setPreferences({ ...preferences, phoneNumber: e.target.value })}
+                        className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 font-mono"
+                        placeholder={connectedNumber || "923001234567"}
+                      />
+                      <p className="text-xs text-zinc-500 mt-2">
+                        By default, notifications are sent to the connected number. You can change it to send to a different number.
+                      </p>
+                    </div>
+
+                    {/* Reading Change Notifications (Always Enabled) */}
+                    <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
+                      <div>
+                        <p className="text-zinc-100 font-medium">Nozzle Reading Change Alerts</p>
+                        <p className="text-xs text-zinc-500 mt-1">Notified when readings are manually adjusted</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-green-500 font-bold">ALWAYS ON</span>
+                        <div className="w-12 h-6 bg-green-600 rounded-full flex items-center justify-end px-1">
+                          <div className="w-4 h-4 bg-white rounded-full" />
+                        </div>
+                      </div>
+                    </div>
                     {/* Backup Notifications (Always Enabled) */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
@@ -367,15 +421,48 @@ export default function WhatsAppPage() {
                     {/* Credit Notifications - REMOVED (now under Sales) */}
 
                     {/* Inventory Notifications */}
+                    <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-900 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-zinc-100 font-medium">Inventory Alerts</p>
+                          <p className="text-xs text-zinc-500 mt-1">Notified when stock is low</p>
+                        </div>
+                        <button
+                          onClick={() => setPreferences({ ...preferences, inventoryNotifications: !preferences.inventoryNotifications })}
+                          className={`w-12 h-6 rounded-full flex items-center transition-all ${
+                            preferences.inventoryNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                          } px-1`}
+                        >
+                          <div className="w-4 h-4 bg-white rounded-full" />
+                        </button>
+                      </div>
+                      {preferences.inventoryNotifications && (
+                        <div className="space-y-2">
+                          <label className="text-sm text-zinc-300">Low Fuel Threshold (%)</label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            value={preferences.lowFuelThreshold}
+                            onChange={(e) => setPreferences({ ...preferences, lowFuelThreshold: parseInt(e.target.value) || 20 })}
+                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
+                            placeholder="20"
+                          />
+                          <p className="text-xs text-zinc-500">Alert when tank level falls below this percentage</p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Stock Change Notifications */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Inventory Alerts</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified when stock is low</p>
+                        <p className="text-zinc-100 font-medium">Stock Change Notifications</p>
+                        <p className="text-xs text-zinc-500 mt-1">Notified when stock is purchased or adjusted</p>
                       </div>
                       <button
-                        onClick={() => setPreferences({ ...preferences, inventoryNotifications: !preferences.inventoryNotifications })}
+                        onClick={() => setPreferences({ ...preferences, stockNotifications: !preferences.stockNotifications })}
                         className={`w-12 h-6 rounded-full flex items-center transition-all ${
-                          preferences.inventoryNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                          preferences.stockNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
                         } px-1`}
                       >
                         <div className="w-4 h-4 bg-white rounded-full" />

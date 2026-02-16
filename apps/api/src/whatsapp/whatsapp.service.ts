@@ -10,7 +10,8 @@ export class WhatsappService implements OnModuleInit {
   private readonly logger = new Logger(WhatsappService.name);
   private isReady = false;
   private qrCode: string | null = null;
-  private authStatus: 'pending' | 'authenticated' | 'ready' | 'failed' = 'pending';
+  private authStatus: 'pending' | 'authenticated' | 'ready' | 'failed' =
+    'pending';
 
   constructor(private prisma: PrismaService) {
     this.client = new Client({
@@ -35,11 +36,53 @@ export class WhatsappService implements OnModuleInit {
       this.authStatus = 'pending';
     });
 
-    this.client.on('ready', () => {
+    this.client.on('ready', async () => {
       this.logger.log('WhatsApp Client is ready!');
       this.isReady = true;
       this.authStatus = 'ready';
       this.qrCode = null;
+
+      // Get connected phone number
+      try {
+        const info = await this.client.info;
+        const phoneNumber = info.wid.user; // Phone number without @c.us
+        this.logger.log(`Connected WhatsApp number: ${phoneNumber}`);
+
+        // Always update/create preferences when WhatsApp connects
+        const prefs = await this.prisma.notificationPreferences.findFirst();
+        if (!prefs) {
+          await this.prisma.notificationPreferences.create({
+            data: {
+              phoneNumber,
+              salesNotifications: true,
+              shiftNotifications: true,
+              inventoryNotifications: true,
+              stockNotifications: true,
+              notifyCash: true,
+              notifyCard: true,
+              notifyOnline: true,
+              notifyCredit: true,
+              minCashAmount: 0,
+              minCardAmount: 0,
+              minOnlineAmount: 0,
+              minCreditAmount: 0,
+              autoCloseShift: false,
+            },
+          });
+          this.logger.log('NotificationPreferences created');
+        } else {
+          // Update phone number if changed
+          if (prefs.phoneNumber !== phoneNumber) {
+            await this.prisma.notificationPreferences.update({
+              where: { id: prefs.id },
+              data: { phoneNumber },
+            });
+            this.logger.log(`NotificationPreferences phone number updated to ${phoneNumber}`);
+          }
+        }
+      } catch (err) {
+        this.logger.error('Failed to get WhatsApp info: ' + err);
+      }
     });
 
     this.client.on('authenticated', () => {
@@ -115,8 +158,33 @@ export class WhatsappService implements OnModuleInit {
     }
   }
 
-  async notifySale(to: string, amount: number, method: string) {
-    const msg = `⚡ *Pump Sale Alert* ⚡\nAmount: Rs. ${amount}\nMethod: ${method}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+  async notifySale(
+    to: string,
+    amount: number,
+    method: string,
+    customerName?: string,
+    vehicleNumber?: string,
+    accountName?: string,
+  ) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Karachi',
+    });
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi',
+    });
+
+    let msg = `⚡ *Pump Sale Alert* ⚡\nAmount: Rs. ${amount}\nMethod: ${method}`;
+    if (customerName) msg += `\nCustomer: ${customerName}`;
+    if (vehicleNumber) msg += `\nVehicle: ${vehicleNumber}`;
+    if (accountName) msg += `\nAccount: ${accountName}`;
+    msg += `\nOn: ${dateStr} ${timeStr}`;
     return this.sendMessage(to, msg);
   }
 
@@ -125,18 +193,112 @@ export class WhatsappService implements OnModuleInit {
     return this.sendMessage(to, msg);
   }
 
-  async notifyBackup(to: string, data: { filename: string; size: string; path: string; type: string; user: string }) {
+  async notifyBackup(
+    to: string,
+    data: {
+      filename: string;
+      size: string;
+      path: string;
+      type: string;
+      user: string;
+    },
+  ) {
     const msg = `📦 *Backup Created* 📦\nType: ${data.type}\nFile: ${data.filename}\nSize: ${data.size}\nLocation: ${data.path}\nBy: ${data.user}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
     return this.sendMessage(to, msg);
   }
 
-  async notifyCashPayment(to: string, data: { customer: string; amount: number; method: string }) {
+  async notifyCashPayment(
+    to: string,
+    data: { customer: string; amount: number; method: string },
+  ) {
     const msg = `💰 *Payment Received* 💰\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nMethod: ${data.method}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
     return this.sendMessage(to, msg);
   }
 
-  async notifyCreditSale(to: string, data: { customer: string; amount: number }) {
+  async notifyCreditSale(
+    to: string,
+    data: { customer: string; amount: number },
+  ) {
     const msg = `📝 *Credit Sale* 📝\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nStatus: Payment Pending\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async getConnectedNumber(): Promise<string | null> {
+    if (!this.isReady) return null;
+    try {
+      const info = await this.client.info;
+      return info.wid.user;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async notifyReadingChange(
+    to: string,
+    data: {
+      nozzle: string;
+      systemReading: number;
+      newReading: number;
+      user: string;
+      shift: string;
+    },
+  ) {
+    const msg = `⚠️ *Nozzle Reading Changed* ⚠️\nNozzle: ${data.nozzle}\nSystem Reading: ${data.systemReading}L\nChanged To: ${data.newReading}L\nBy: ${data.user}\nShift: ${data.shift}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async notifyStockChange(
+    to: string,
+    data: {
+      action: string;
+      user: string;
+      quantity: number;
+      amount: number;
+      available: number;
+      tank: string;
+    },
+  ) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Karachi',
+    });
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi',
+    });
+
+    const msg = `📦 *Stock ${data.action}* 📦\n${data.action} By: ${data.user}\nQuantity: ${data.quantity}L\nAmount: Rs. ${data.amount}\nNow Available: ${data.available}L\nTank: ${data.tank}\nOn: ${dateStr} ${timeStr}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async notifyLowFuel(
+    to: string,
+    tankName: string,
+    productName: string,
+    currentStock: number,
+    capacity: number,
+    percentage: number,
+  ) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Karachi',
+    });
+    const timeStr = now.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi',
+    });
+
+    const msg = `⚠️ *LOW FUEL ALERT* ⚠️\nTank: ${tankName}\nProduct: ${productName}\nCurrent: ${currentStock.toFixed(2)}L\nCapacity: ${capacity}L\nLevel: ${percentage.toFixed(1)}%\n⚠️ REFILL REQUIRED\nOn: ${dateStr} ${timeStr}`;
     return this.sendMessage(to, msg);
   }
 
