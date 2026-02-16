@@ -6,5 +6,9 @@ export class CreateProductDto {
 
   @IsNumber()
   @Min(0)
-  price: number;
+  sellingPrice: number;
+
+  @IsNumber()
+  @Min(0)
+  purchasePrice: number;
 }

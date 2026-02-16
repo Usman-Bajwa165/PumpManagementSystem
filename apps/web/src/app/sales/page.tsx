@@ -90,8 +90,8 @@ export default function SalesPage() {
   useEffect(() => {
     if (selectedNozzle) {
       const nozzle = nozzles.find((n) => n.id === selectedNozzle);
-      if (nozzle?.tank?.product?.price) {
-        setPricePerLiter(Number(nozzle.tank.product.price));
+      if (nozzle?.tank?.product?.sellingPrice) {
+        setPricePerLiter(Number(nozzle.tank.product.sellingPrice));
         setAvailableStock(Number(nozzle.tank.currentStock));
       }
     }
@@ -375,7 +375,7 @@ export default function SalesPage() {
                     <option value="">Choose Nozzle</option>
                     {nozzles.map((n) => (
                       <option key={n.id} value={n.id}>
-                        {n.name} - {n.tank?.product?.name} (Rs. {n.tank?.product?.price}/L)
+                        {n.name} - {n.tank?.product?.name} (Rs. {n.tank?.product?.sellingPrice}/L)
                       </option>
                     ))}
                   </select>

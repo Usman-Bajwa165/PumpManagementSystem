@@ -204,10 +204,10 @@ export class InventoryService {
     return this.prisma.product.delete({ where: { id } });
   }
 
-  async updateProduct(id: string, price: number) {
+  async updateProduct(id: string, data: { sellingPrice?: number; purchasePrice?: number }) {
     return this.prisma.product.update({
       where: { id },
-      data: { price },
+      data,
     });
   }
 

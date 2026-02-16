@@ -50,13 +50,22 @@ export default function DashboardPage() {
     return { date: formattedDate, time: formattedTime, period };
   };
 
-  const stats = [
+  const allStats = [
     {
       name: "Today Sales",
       value: `Rs. ${summary?.todaySales?.toLocaleString() || 0}`,
       icon: TrendingUp,
       change: summary?.todaySales > 0 ? "+Active" : "No sales yet",
       trend: summary?.todaySales > 0 ? "up" : "neutral",
+      roles: ["ADMIN", "MANAGER", "OPERATOR"],
+    },
+    {
+      name: "Today Profit",
+      value: `Rs. ${summary?.todayProfit?.toLocaleString() || 0}`,
+      icon: TrendingUp,
+      change: summary?.todayProfit > 0 ? "Margin Earned" : "No profit yet",
+      trend: summary?.todayProfit > 0 ? "up" : "neutral",
+      roles: ["ADMIN", "MANAGER"],
     },
     {
       name: "Active Shift",
@@ -68,6 +77,7 @@ export default function DashboardPage() {
         ? `Started at ${formatShiftTime(summary.activeShift.startedAt).time}`
         : "Station Closed",
       trend: "neutral",
+      roles: ["ADMIN", "MANAGER", "OPERATOR"],
     },
     {
       name: "Credit Sales",
@@ -75,6 +85,7 @@ export default function DashboardPage() {
       icon: Users,
       change: "Institutional",
       trend: "neutral",
+      roles: ["ADMIN", "MANAGER", "OPERATOR"],
     },
     {
       name: "Stock Alerts",
@@ -85,8 +96,11 @@ export default function DashboardPage() {
       icon: AlertTriangle,
       change: summary?.lowStockCount > 0 ? "Action Required" : "All optimal",
       trend: summary?.lowStockCount > 0 ? "down" : "up",
+      roles: ["ADMIN", "MANAGER", "OPERATOR"],
     },
   ];
+
+  const stats = allStats.filter(stat => stat.roles.includes(user?.role || ""));
 
   if (isLoading) {
     return (
@@ -111,7 +125,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 ${user?.role === "OPERATOR" ? "lg:grid-cols-4" : "lg:grid-cols-5"}`}>
           {stats.map((stat) => (
             <div
               key={stat.name}

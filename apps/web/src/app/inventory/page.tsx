@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
+import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import {
   Package,
@@ -39,6 +40,8 @@ export default function InventoryPage() {
   const [showDipModal, setShowDipModal] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const { user } = useAuth();
+  const isReadOnly = user?.role === "OPERATOR";
 
   // Form States
   const [selectedTank, setSelectedTank] = useState("");
@@ -139,12 +142,13 @@ export default function InventoryPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-100 tracking-tight italic">
-              Inventory & Stock
+              Inventory & Stock {isReadOnly && <span className="text-sm text-zinc-500">(View Only)</span>}
             </h1>
             <p className="text-sm text-zinc-500 mt-1">
-              Monitor real-time fuel levels and record stock-in.
+              {isReadOnly ? "View real-time fuel levels." : "Monitor real-time fuel levels and record stock-in."}
             </p>
           </div>
+          {!isReadOnly && (
           <div className="flex gap-4">
             <button
               onClick={() => {
@@ -177,6 +181,7 @@ export default function InventoryPage() {
               Record Purchase
             </button>
           </div>
+          )}
         </div>
 
         {success && (
@@ -289,15 +294,15 @@ export default function InventoryPage() {
                     onChange={(e) => {
                       setSelectedTank(e.target.value);
                       const tank = tanks.find(t => t.id === e.target.value);
-                      if (tank?.product?.price) {
-                        setPricePerLiter(Number(tank.product.price));
+                      if (tank?.product?.purchasePrice) {
+                        setPricePerLiter(Number(tank.product.purchasePrice));
                       }
                     }}
                   >
                     <option value="">Select Tank</option>
                     {tanks.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.name} ({t.product?.name}) - Rs. {t.product?.price}/L
+                        {t.name} ({t.product?.name}) - Rs. {t.product?.purchasePrice}/L
                       </option>
                     ))}
                   </select>

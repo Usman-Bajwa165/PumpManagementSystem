@@ -42,13 +42,13 @@ export class ReportsController {
     );
   }
 
-  @Roles(Role.MANAGER, Role.ADMIN, Role.OPERATOR)
+  @Roles(Role.MANAGER, Role.ADMIN)
   @Get('daily-summary/:shiftId')
   getDailySummary(@Param('shiftId') shiftId: string) {
     return this.reportsService.getDailySaleSummary(shiftId);
   }
 
-  @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
+  @Roles(Role.ADMIN, Role.MANAGER)
   @Get('dashboard-summary')
   getDashboardSummary() {
     return this.reportsService.getDashboardSummary();

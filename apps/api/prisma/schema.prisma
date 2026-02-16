@@ -60,10 +60,11 @@ model Shift {
 }
 
 model Product {
-  id      String   @id @default(uuid())
-  name    String   @unique // Petrol, Diesel, lubricant
-  price   Decimal  @db.Decimal(10, 2)
-  tanks   Tank[]
+  id            String   @id @default(uuid())
+  name          String   @unique // Petrol, Diesel, lubricant
+  sellingPrice  Decimal  @db.Decimal(10, 2)
+  purchasePrice Decimal  @db.Decimal(10, 2)
+  tanks         Tank[]
 }
 
 model Tank {
@@ -163,6 +164,7 @@ model Transaction {
   creditAccount   Account  @relation("CreditAccount", fields: [creditAccountId], references: [id])
   
   amount          Decimal  @db.Decimal(15, 2)
+  profit          Decimal? @db.Decimal(15, 2) // Profit on sales
   description     String?
   createdAt       DateTime @default(now())
 }

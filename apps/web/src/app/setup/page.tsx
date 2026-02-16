@@ -17,13 +17,15 @@ export default function SetupPage() {
   const toast = useToast();
   const { user } = useAuth();
   const router = useRouter();
+  const isReadOnly = user?.role === "OPERATOR";
 
-  const [productForm, setProductForm] = useState({ name: "", price: "" });
+  const [productForm, setProductForm] = useState({ name: "", sellingPrice: "", purchasePrice: "" });
   const [tankForm, setTankForm] = useState({ name: "", capacity: "", productId: "", currentStock: "" });
   const [nozzleForm, setNozzleForm] = useState({ name: "", tankId: "", lastReading: "" });
   const [stockWarning, setStockWarning] = useState("");
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
-  const [editPrice, setEditPrice] = useState("");
+  const [editSellingPrice, setEditSellingPrice] = useState("");
+  const [editPurchasePrice, setEditPurchasePrice] = useState("");
 
   const productNameRef = useRef<HTMLInputElement>(null);
   const productPriceRef = useRef<HTMLInputElement>(null);
@@ -65,12 +67,8 @@ export default function SetupPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (user?.role !== "ADMIN" && user?.role !== "MANAGER") {
-      router.push("/dashboard");
-      return;
-    }
     fetchData();
-  }, [user, router]);
+  }, []);
 
   const fetchData = async () => {
     try {
@@ -94,10 +92,11 @@ export default function SetupPage() {
     try {
       await api.post("/inventory/products", {
         name: productForm.name,
-        price: parseFloat(productForm.price),
+        sellingPrice: parseFloat(productForm.sellingPrice),
+        purchasePrice: parseFloat(productForm.purchasePrice),
       });
       toast.success("Product Created", `${productForm.name} added successfully`);
-      setProductForm({ name: "", price: "" });
+      setProductForm({ name: "", sellingPrice: "", purchasePrice: "" });
       fetchData();
       productNameRef.current?.focus();
     } catch (err: any) {
@@ -182,19 +181,21 @@ export default function SetupPage() {
 
   const handleUpdatePrice = async (id: string, name: string) => {
     try {
-      await api.patch(`/inventory/products/${id}`, { price: parseFloat(editPrice) });
-      toast.success("Price Updated", `${name} price updated to Rs. ${editPrice}`);
+      await api.patch(`/inventory/products/${id}`, { 
+        sellingPrice: parseFloat(editSellingPrice),
+        purchasePrice: parseFloat(editPurchasePrice),
+      });
+      toast.success("Prices Updated", `${name} prices updated successfully`);
       setEditingProduct(null);
-      setEditPrice("");
+      setEditSellingPrice("");
+      setEditPurchasePrice("");
       fetchData();
     } catch (err: any) {
-      toast.error("Failed", err.response?.data?.message || "Unable to update price");
+      toast.error("Failed", err.response?.data?.message || "Unable to update prices");
     }
   };
 
-  if (user?.role !== "ADMIN" && user?.role !== "MANAGER") {
-    return null;
-  }
+
 
   if (isLoading) {
     return (
@@ -212,10 +213,10 @@ export default function SetupPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight italic flex items-center gap-3">
             <Settings className="text-blue-500" />
-            System Setup
+            System Setup {isReadOnly && <span className="text-sm text-zinc-500">(View Only)</span>}
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-500 mt-1">
-            Configure products, tanks, and nozzles. Note: Nozzle readings are managed per shift, not here.
+            {isReadOnly ? "View products, tanks, and nozzles configuration." : "Configure products, tanks, and nozzles. Note: Nozzle readings are managed per shift, not here."}
           </p>
         </div>
 
@@ -237,6 +238,7 @@ export default function SetupPage() {
 
         {activeTab === "products" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {!isReadOnly && (
             <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Product</h2>
               <form onSubmit={handleCreateProduct} className="space-y-4">
@@ -262,15 +264,29 @@ export default function SetupPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Price per Liter (Rs.)
+                    Selling Price per Liter (Rs.)
                   </label>
                   <input
                     ref={productPriceRef}
                     type="number"
                     step="0.01"
                     required
-                    value={productForm.price}
-                    onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
+                    value={productForm.sellingPrice}
+                    onChange={(e) => setProductForm({ ...productForm, sellingPrice: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    Purchase Price per Liter (Rs.)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    value={productForm.purchasePrice}
+                    onChange={(e) => setProductForm({ ...productForm, purchasePrice: e.target.value })}
                     className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
                     placeholder="0.00"
                   />
@@ -284,8 +300,9 @@ export default function SetupPage() {
                 </button>
               </form>
             </div>
+            )}
 
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Products</h2>
               <div className="space-y-2">
                 {products.length === 0 ? (
@@ -299,47 +316,68 @@ export default function SetupPage() {
                       <div className="flex-1">
                         <p className="font-bold text-zinc-900 dark:text-zinc-100">{p.name}</p>
                         {editingProduct === p.id ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={editPrice}
-                              onChange={(e) => setEditPrice(e.target.value)}
-                              className="w-24 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleUpdatePrice(p.id, p.name)}
-                              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingProduct(null);
-                                setEditPrice("");
-                              }}
-                              className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
-                            >
-                              Cancel
-                            </button>
+                          <div className="space-y-2 mt-2">
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-zinc-500 w-16">Selling:</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editSellingPrice}
+                                onChange={(e) => setEditSellingPrice(e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                                autoFocus
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <label className="text-xs text-zinc-500 w-16">Purchase:</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editPurchasePrice}
+                                onChange={(e) => setEditPurchasePrice(e.target.value)}
+                                className="flex-1 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleUpdatePrice(p.id, p.name)}
+                                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingProduct(null);
+                                  setEditSellingPrice("");
+                                  setEditPurchasePrice("");
+                                }}
+                                className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
                         ) : (
-                          <p className="text-sm text-zinc-500">Rs. {p.price}/L</p>
+                          <div className="text-sm text-zinc-500">
+                            <p>Selling: Rs. {p.sellingPrice}/L</p>
+                            <p>Purchase: Rs. {p.purchasePrice}/L</p>
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {!editingProduct && (
+                        {!editingProduct && !isReadOnly && (
                           <button
                             onClick={() => {
                               setEditingProduct(p.id);
-                              setEditPrice(p.price.toString());
+                              setEditSellingPrice(p.sellingPrice.toString());
+                              setEditPurchasePrice(p.purchasePrice.toString());
                             }}
                             className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
                           >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
                           </button>
                         )}
+                        {!isReadOnly && (
                         <button
                           onClick={() => handleDeleteProduct(p.id, p.name)}
                           className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
@@ -347,6 +385,7 @@ export default function SetupPage() {
                         >
                           <Trash2 size={16} />
                         </button>
+                        )}
                       </div>
                     </div>
                   ))
@@ -358,6 +397,7 @@ export default function SetupPage() {
 
         {activeTab === "tanks" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {!isReadOnly && (
             <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Tank</h2>
               <form onSubmit={handleCreateTank} className="space-y-4">
@@ -461,8 +501,9 @@ export default function SetupPage() {
                 </button>
               </form>
             </div>
+            )}
 
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Tanks</h2>
               <div className="space-y-2">
                 {tanks.length === 0 ? (
@@ -479,12 +520,14 @@ export default function SetupPage() {
                           {t.product?.name} | {t.currentStock}/{t.capacity}L
                         </p>
                       </div>
+                      {!isReadOnly && (
                       <button
                         onClick={() => handleDeleteTank(t.id, t.name)}
                         className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
                       >
                         <Trash2 size={16} />
                       </button>
+                      )}
                     </div>
                   ))
                 )}
@@ -495,6 +538,7 @@ export default function SetupPage() {
 
         {activeTab === "nozzles" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {!isReadOnly && (
             <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Nozzle</h2>
               <form onSubmit={handleCreateNozzle} className="space-y-4">
@@ -567,8 +611,9 @@ export default function SetupPage() {
                 </button>
               </form>
             </div>
+            )}
 
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
               <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Nozzles</h2>
               <div className="space-y-2">
                 {nozzles.length === 0 ? (
@@ -585,12 +630,14 @@ export default function SetupPage() {
                           {n.tank?.name} | Reading: {n.lastReading}
                         </p>
                       </div>
+                      {!isReadOnly && (
                       <button
                         onClick={() => handleDeleteNozzle(n.id, n.name)}
                         className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
                       >
                         <Trash2 size={16} />
                       </button>
+                      )}
                     </div>
                   ))
                 )}

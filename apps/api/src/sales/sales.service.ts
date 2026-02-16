@@ -128,10 +128,14 @@ export class SalesService {
         throw new BadRequestException('Invalid payment method');
       }
 
+      // Calculate profit: (sellingPrice - purchasePrice) * quantity
+      const profit = (Number(nozzle.tank.product.sellingPrice) - Number(nozzle.tank.product.purchasePrice)) * dto.quantity;
+
       const tx = await this.accountingService.createTransaction({
         debitCode: debitAccountCode,
         creditCode: incomeAccountCode,
         amount: dto.amount,
+        profit,
         description:
           dto.description ||
           `${nozzle.name} - ${dto.quantity}L ${nozzle.tank.product.name} - ${dto.paymentMethod}${dto.customerName ? ` - ${dto.customerName}` : ''}${dto.vehicleNumber ? ` (${dto.vehicleNumber})` : ''}${dto.paymentAccountId ? ` [Account: ${dto.paymentAccountId}]` : ''}`,

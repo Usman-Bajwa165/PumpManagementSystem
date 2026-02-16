@@ -188,6 +188,7 @@ export class ReportsService {
       },
     });
     const totalSales = sales.reduce((sum, s) => sum + Number(s.amount), 0);
+    const totalProfit = sales.reduce((sum, s) => sum + Number(s.profit || 0), 0);
 
     // Active Shift
     const activeShift = await this.prisma.shift.findFirst({
@@ -243,6 +244,7 @@ export class ReportsService {
 
     return {
       todaySales: totalSales,
+      todayProfit: totalProfit,
       activeShift: activeShift
         ? { id: activeShift.id, startedAt: activeShift.startTime }
         : null,

@@ -40,6 +40,7 @@ export class AccountingService implements OnModuleInit {
     debitCode: string;
     creditCode: string;
     amount: number;
+    profit?: number;
     description?: string;
     shiftId?: string;
   }) {
@@ -60,6 +61,7 @@ export class AccountingService implements OnModuleInit {
         debitAccountId: debitAcc.id,
         creditAccountId: creditAcc.id,
         amount: data.amount,
+        profit: data.profit,
         description: data.description,
         shiftId: data.shiftId,
       },
