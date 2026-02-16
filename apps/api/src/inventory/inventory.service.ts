@@ -141,7 +141,7 @@ export class InventoryService {
     });
 
     // Accounting for Variance
-    const price = Number(tank.product?.price || 0);
+    const price = Number(tank.product?.purchasePrice || 0);
     const varianceAmount = Math.abs(variance) * price;
 
     if (variance < 0) {

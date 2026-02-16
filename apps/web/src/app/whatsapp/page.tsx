@@ -320,8 +320,9 @@ export default function WhatsAppPage() {
                           {preferences.notifyCash && (
                             <input
                               type="number"
-                              value={preferences.minCashAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCashAmount: parseFloat(e.target.value) || 0 })}
+                              min="0"
+                              value={preferences.minCashAmount === 0 ? "" : preferences.minCashAmount}
+                              onChange={(e) => setPreferences({ ...preferences, minCashAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -344,8 +345,9 @@ export default function WhatsAppPage() {
                           {preferences.notifyCard && (
                             <input
                               type="number"
-                              value={preferences.minCardAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCardAmount: parseFloat(e.target.value) || 0 })}
+                              min="0"
+                              value={preferences.minCardAmount === 0 ? "" : preferences.minCardAmount}
+                              onChange={(e) => setPreferences({ ...preferences, minCardAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -368,8 +370,9 @@ export default function WhatsAppPage() {
                           {preferences.notifyOnline && (
                             <input
                               type="number"
-                              value={preferences.minOnlineAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minOnlineAmount: parseFloat(e.target.value) || 0 })}
+                              min="0"
+                              value={preferences.minOnlineAmount === 0 ? "" : preferences.minOnlineAmount}
+                              onChange={(e) => setPreferences({ ...preferences, minOnlineAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -392,8 +395,9 @@ export default function WhatsAppPage() {
                           {preferences.notifyCredit && (
                             <input
                               type="number"
-                              value={preferences.minCreditAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCreditAmount: parseFloat(e.target.value) || 0 })}
+                              min="0"
+                              value={preferences.minCreditAmount === 0 ? "" : preferences.minCreditAmount}
+                              onChange={(e) => setPreferences({ ...preferences, minCreditAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -444,7 +448,8 @@ export default function WhatsAppPage() {
                             min="1"
                             max="100"
                             value={preferences.lowFuelThreshold}
-                            onChange={(e) => setPreferences({ ...preferences, lowFuelThreshold: parseInt(e.target.value) || 20 })}
+                            onChange={(e) => setPreferences({ ...preferences, lowFuelThreshold: e.target.value === "" ? "" : parseInt(e.target.value) })}
+                            onBlur={(e) => { if (e.target.value === "") setPreferences({ ...preferences, lowFuelThreshold: 20 }); }}
                             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                             placeholder="20"
                           />

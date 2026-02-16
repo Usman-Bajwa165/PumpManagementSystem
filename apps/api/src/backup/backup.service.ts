@@ -330,7 +330,7 @@ export class BackupService {
         .fontSize(10)
         .fillColor('#000')
         .text(
-          `${idx + 1}. ${product.name} - Rs. ${product.price.toString()}/L`,
+          `${idx + 1}. ${product.name} - Selling: Rs. ${product.sellingPrice.toString()}/L, Purchase: Rs. ${product.purchasePrice.toString()}/L`,
           {
             indent: 20,
           },
