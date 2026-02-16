@@ -145,3 +145,28 @@ model NotificationQueue {
   createdAt DateTime @default(now())
 }
 
+model NotificationPreferences {
+  id                String   @id @default(uuid())
+  phoneNumber       String   @unique
+  
+  // Main notification toggles (backup is always enabled)
+  salesNotifications    Boolean @default(true)
+  shiftNotifications    Boolean @default(true)
+  inventoryNotifications Boolean @default(true)
+  
+  // Sales notification sub-options (only if salesNotifications is true)
+  notifyCash        Boolean @default(true)
+  notifyCard        Boolean @default(true)
+  notifyOnline      Boolean @default(true)
+  notifyCredit      Boolean @default(true)
+  
+  // Minimum amounts per payment method
+  minCashAmount     Decimal  @default(0) @db.Decimal(10, 2)
+  minCardAmount     Decimal  @default(0) @db.Decimal(10, 2)
+  minOnlineAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  minCreditAmount   Decimal  @default(0) @db.Decimal(10, 2)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

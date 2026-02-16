@@ -39,20 +39,42 @@ export class ReportsService {
   async getBalanceSheet() {
     const accounts = await this.prisma.account.findMany();
 
-    const assets = accounts.filter((a) => a.type === AccountType.ASSET);
-    const liabilities = accounts.filter(
+    const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
+    const liabilityAccounts = accounts.filter(
       (a) => a.type === AccountType.LIABILITY,
     );
-    const equity = accounts.filter((a) => a.type === AccountType.EQUITY);
+    const equityAccounts = accounts.filter((a) => a.type === AccountType.EQUITY);
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
-    const totalAssets = assets.reduce((sum, a) => sum + Number(a.balance), 0);
-    const totalLiabilities = liabilities.reduce(
+    const assets: Record<string, number> = {};
+    const liabilities: Record<string, number> = {};
+    const equity: Record<string, number> = {};
+
+    assetAccounts.forEach((a) => {
+      assets[a.name] = Number(a.balance);
+    });
+
+    liabilityAccounts.forEach((a) => {
+      liabilities[a.name] = Number(a.balance);
+    });
+
+    equityAccounts.forEach((a) => {
+      equity[a.name] = Number(a.balance);
+    });
+
+    const totalAssets = assetAccounts.reduce(
       (sum, a) => sum + Number(a.balance),
       0,
     );
-    const totalEquity = equity.reduce((sum, a) => sum + Number(a.balance), 0);
+    const totalLiabilities = liabilityAccounts.reduce(
+      (sum, a) => sum + Number(a.balance),
+      0,
+    );
+    const totalEquity = equityAccounts.reduce(
+      (sum, a) => sum + Number(a.balance),
+      0,
+    );
 
     const netProfit =
       income.reduce((sum, a) => sum + Number(a.balance), 0) -
@@ -65,6 +87,7 @@ export class ReportsService {
       totalAssets,
       totalLiabilities,
       totalEquity,
+      totalLiabilitiesAndEquity: totalLiabilities + totalEquity,
       netProfit,
       isBalanced: totalAssets === totalLiabilities + totalEquity + netProfit,
     };
@@ -78,12 +101,8 @@ export class ReportsService {
       where: { type: AccountType.EXPENSE },
     });
 
-    const result: {
-      name: string;
-      code: string;
-      amount: number;
-      type: string;
-    }[] = [];
+    const income: Record<string, number> = {};
+    const expenses: Record<string, number> = {};
     let totalIncome = 0;
     let totalExpenses = 0;
 
@@ -97,7 +116,7 @@ export class ReportsService {
         },
       });
       const amount = txs.reduce((sum, tx) => sum + Number(tx.amount), 0);
-      result.push({ name: acc.name, code: acc.code, amount, type: 'INCOME' });
+      income[acc.name] = amount;
       totalIncome += amount;
     }
 
@@ -111,12 +130,13 @@ export class ReportsService {
         },
       });
       const amount = txs.reduce((sum, tx) => sum + Number(tx.amount), 0);
-      result.push({ name: acc.name, code: acc.code, amount, type: 'EXPENSE' });
+      expenses[acc.name] = amount;
       totalExpenses += amount;
     }
 
     return {
-      items: result,
+      income,
+      expenses,
       totalIncome,
       totalExpenses,
       netProfit: totalIncome - totalExpenses,

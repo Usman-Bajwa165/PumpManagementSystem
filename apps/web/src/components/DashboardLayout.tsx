@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
+import DateTime from "@/components/DateTime";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 
@@ -34,6 +35,8 @@ export default function DashboardLayout({
       <Sidebar />
       <main className="flex-1 overflow-y-auto p-8 relative">
         <div className="absolute top-0 right-0 p-4 flex items-center gap-4">
+          <DateTime />
+          <div className="h-4 w-px bg-zinc-800" />
           <div className="text-right">
             <p className="text-xs font-medium text-zinc-100">{user.username}</p>
             <p className="text-[10px] text-zinc-500 uppercase">{user.role}</p>

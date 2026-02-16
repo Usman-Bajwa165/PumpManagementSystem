@@ -1,2 +1,0 @@
-src/accounting/accounting.service.ts(95,59): error TS2345: Argument of type 'AccountType' is not assignable to parameter of type '"ASSET" | "EXPENSE"'.
-  Type '"LIABILITY"' is not assignable to type '"ASSET" | "EXPENSE"'.

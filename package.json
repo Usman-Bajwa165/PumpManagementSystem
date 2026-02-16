@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "predev": "docker compose up -d",
-    "dev": "npx -y concurrently -n \"API,WEB\" -c \"green,magenta\" \"npm run dev --workspace api\" \"npm run dev --workspace web\"",
+    "predev": "npx kill-port 3000 3001",
+    "dev": "node scripts/dev.js",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -19,6 +19,7 @@
   "type": "commonjs",
   "dependencies": {
     "concurrently": "^8.2.2",
+    "date-fns": "^4.1.0",
     "@prisma/client": "^7.4.0",
     "autoprefixer": "^10.4.24",
     "postcss": "^8.5.6",

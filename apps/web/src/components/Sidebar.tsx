@@ -13,15 +13,19 @@ import {
   LogOut,
   User,
   Settings,
+  MessageSquare,
+  Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Shifts", href: "/shifts", icon: Fuel },
-  { name: "Sales", href: "/sales", icon: ShoppingCart },
-  { name: "Inventory", href: "/inventory", icon: BookOpen },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
+  { name: "Shifts", href: "/shifts", icon: Fuel, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
+  { name: "Sales", href: "/sales", icon: ShoppingCart, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
+  { name: "Inventory", href: "/inventory", icon: BookOpen, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
+  { name: "Reports", href: "/reports", icon: BarChart3, roles: ["ADMIN", "MANAGER"] },
+  { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare, roles: ["ADMIN", "MANAGER"] },
+  { name: "Backups", href: "/backup", icon: Database, roles: ["ADMIN", "MANAGER"] },
 ];
 
 export default function Sidebar() {
@@ -38,31 +42,33 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 px-4 py-4">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-red-600/10 text-red-500"
-                  : "hover:bg-zinc-900 hover:text-zinc-100",
-              )}
-            >
-              <item.icon
+        {navItems
+          .filter((item) => item.roles.includes(user?.role || ""))
+          .map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
                 className={cn(
-                  "mr-3 h-5 w-5",
+                  "group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "text-red-500"
-                    : "text-zinc-500 group-hover:text-zinc-100",
+                    ? "bg-red-600/10 text-red-500"
+                    : "hover:bg-zinc-900 hover:text-zinc-100",
                 )}
-              />
-              {item.name}
-            </Link>
-          );
-        })}
+              >
+                <item.icon
+                  className={cn(
+                    "mr-3 h-5 w-5",
+                    isActive
+                      ? "text-red-500"
+                      : "text-zinc-500 group-hover:text-zinc-100",
+                  )}
+                />
+                {item.name}
+              </Link>
+            );
+          })}
       </nav>
 
       <div className="border-t border-zinc-900 p-4">

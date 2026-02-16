@@ -9,10 +9,14 @@ export class WhatsappService implements OnModuleInit {
   private client: Client;
   private readonly logger = new Logger(WhatsappService.name);
   private isReady = false;
+  private qrCode: string | null = null;
+  private authStatus: 'pending' | 'authenticated' | 'ready' | 'failed' = 'pending';
 
   constructor(private prisma: PrismaService) {
     this.client = new Client({
-      authStrategy: new LocalAuth(),
+      authStrategy: new LocalAuth({
+        dataPath: './.wwebjs_auth', // Store in api root, not src
+      }),
       puppeteer: {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox'],
@@ -26,25 +30,32 @@ export class WhatsappService implements OnModuleInit {
 
   private initialize() {
     this.client.on('qr', (qr) => {
-      this.logger.log('WhatsApp QR Code generated. Scan it to log in:');
-      qrcode.generate(qr, { small: true });
+      this.logger.log('WhatsApp QR Code generated');
+      this.qrCode = qr;
+      this.authStatus = 'pending';
     });
 
     this.client.on('ready', () => {
       this.logger.log('WhatsApp Client is ready!');
       this.isReady = true;
+      this.authStatus = 'ready';
+      this.qrCode = null;
     });
 
     this.client.on('authenticated', () => {
       this.logger.log('WhatsApp Client authenticated!');
+      this.authStatus = 'authenticated';
     });
 
     this.client.on('auth_failure', (msg) => {
       this.logger.error('WhatsApp Authentication failed: ' + msg);
+      this.authStatus = 'failed';
+      this.qrCode = null;
     });
 
     this.client.initialize().catch((err) => {
       this.logger.error('Failed to initialize WhatsApp client: ' + err.message);
+      this.authStatus = 'failed';
     });
   }
 
@@ -105,12 +116,42 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async notifySale(to: string, amount: number, method: string) {
-    const msg = `⚡ *Pump Sale Alert* ⚡\nAmount: Rs. ${amount}\nMethod: ${method}\nTime: ${new Date().toLocaleString()}`;
+    const msg = `⚡ *Pump Sale Alert* ⚡\nAmount: Rs. ${amount}\nMethod: ${method}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
     return this.sendMessage(to, msg);
   }
 
   async notifyShiftEnd(to: string, summary: any) {
     const msg = `🏁 *Shift Closed* 🏁\nShift ID: ${summary.shiftId}\nTotal Sales: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCredit: Rs. ${summary.creditSales}\nTime: ${new Date().toLocaleString()}`;
     return this.sendMessage(to, msg);
+  }
+
+  async notifyBackup(to: string, data: { filename: string; size: string; path: string; type: string; user: string }) {
+    const msg = `📦 *Backup Created* 📦\nType: ${data.type}\nFile: ${data.filename}\nSize: ${data.size}\nLocation: ${data.path}\nBy: ${data.user}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async notifyCashPayment(to: string, data: { customer: string; amount: number; method: string }) {
+    const msg = `💰 *Payment Received* 💰\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nMethod: ${data.method}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async notifyCreditSale(to: string, data: { customer: string; amount: number }) {
+    const msg = `📝 *Credit Sale* 📝\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nStatus: Payment Pending\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  getStatus() {
+    return {
+      isReady: this.isReady,
+      status: this.authStatus,
+      hasQR: !!this.qrCode,
+    };
+  }
+
+  getQRCode() {
+    return {
+      qrCode: this.qrCode,
+      status: this.authStatus,
+    };
   }
 }
