@@ -72,9 +72,9 @@ export default function InventoryPage() {
     setError("");
     const tank = tanks.find(t => t.id === selectedTank);
     if (tank) {
-      const newTotal = tank.currentStock + Number(quantity);
+      const newTotal = Number(tank.currentStock) + Number(quantity);
       if (newTotal > tank.capacity) {
-        setError(`Capacity: ${tank.capacity}L, Adding: ${quantity}L, Total: ${newTotal}L. Stock cannot exceed tank capacity!`);
+        setError(`Capacity: ${tank.capacity}L, Adding: ${quantity}L, Total: ${newTotal.toFixed(2)}L. Stock cannot exceed tank capacity!`);
         setIsSubmitting(false);
         return;
       }
@@ -320,9 +320,9 @@ export default function InventoryPage() {
                           if (pricePerLiter > 0) {
                             setCost((Number(e.target.value) * pricePerLiter).toFixed(2));
                           }
-                          const newTotal = tank.currentStock + Number(e.target.value);
+                          const newTotal = Number(tank.currentStock) + Number(e.target.value);
                           if (newTotal > tank.capacity) {
-                            setCapacityWarning(`Capacity: ${tank.capacity}L, Available: ${tank.currentStock}L, Purchasing: ${e.target.value}L, Total: ${newTotal}L. Cannot exceed capacity!`);
+                            setCapacityWarning(`Capacity: ${tank.capacity}L, Available: ${tank.currentStock}L, Purchasing: ${e.target.value}L, Total: ${newTotal.toFixed(2)}L. Cannot exceed capacity!`);
                           } else {
                             setCapacityWarning("");
                           }
@@ -351,7 +351,7 @@ export default function InventoryPage() {
                         if (pricePerLiter > 0 && e.target.value && tank) {
                           const calculatedQty = Number(e.target.value) / pricePerLiter;
                           setQuantity(calculatedQty.toFixed(2));
-                          const newTotal = tank.currentStock + calculatedQty;
+                          const newTotal = Number(tank.currentStock) + calculatedQty;
                           if (newTotal > tank.capacity) {
                             setCapacityWarning(`Capacity: ${tank.capacity}L, Available: ${tank.currentStock}L, Purchasing: ${calculatedQty.toFixed(2)}L, Total: ${newTotal.toFixed(2)}L. Cannot exceed capacity!`);
                           } else {
