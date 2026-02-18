@@ -48,9 +48,81 @@ export class ReportsController {
     return this.reportsService.getDailySaleSummary(shiftId);
   }
 
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.MANAGER, Role.ADMIN)
   @Get('dashboard-summary')
   getDashboardSummary() {
     return this.reportsService.getDashboardSummary();
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('sales')
+  getSalesReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('viewMode') viewMode?: string,
+    @Query('shiftId') shiftId?: string,
+    @Query('nozzleId') nozzleId?: string,
+    @Query('productId') productId?: string,
+  ) {
+    return this.reportsService.getSalesReport(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      viewMode,
+      shiftId,
+      nozzleId,
+      productId,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('purchase')
+  getPurchaseReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('paymentStatus') paymentStatus?: string,
+    @Query('productId') productId?: string,
+  ) {
+    return this.reportsService.getPurchaseReport(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      supplierId,
+      paymentStatus,
+      productId,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('ledger/supplier/:id')
+  getSupplierLedger(
+    @Param('id') id: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getSupplierLedger(
+      id,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('ledger/customer/:id')
+  getCustomerLedger(
+    @Param('id') id: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getCustomerLedger(
+      id,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('trial-balance')
+  getTrialBalance() {
+    return this.reportsService.getTrialBalance();
   }
 }

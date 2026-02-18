@@ -11,6 +11,8 @@ import {
   Loader2,
   Smartphone,
   Globe,
+  Fuel,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/Toast";
@@ -22,7 +24,9 @@ export default function SalesPage() {
   const [selectedAccount, setSelectedAccount] = useState("");
   const [amount, setAmount] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "CARD" | "ONLINE" | "CREDIT">("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<
+    "CASH" | "CARD" | "ONLINE" | "CREDIT"
+  >("CASH");
   const [customerName, setCustomerName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
   const [description, setDescription] = useState("");
@@ -55,25 +59,26 @@ export default function SalesPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'Enter') {
+      if (e.shiftKey && e.key === "Enter") {
         e.preventDefault();
-        setIsCreditPayment(prev => !prev);
+        setIsCreditPayment((prev) => !prev);
         setTimeout(() => firstFieldRef.current?.focus(), 0);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   useEffect(() => {
     const checkShift = async () => {
       try {
-        const [shiftRes, nozzlesRes, accountsRes, creditRes] = await Promise.all([
-          api.get("/shifts/current"),
-          api.get("/inventory/nozzles"),
-          api.get("/payment-accounts"),
-          api.get("/sales/credit-customers"),
-        ]);
+        const [shiftRes, nozzlesRes, accountsRes, creditRes] =
+          await Promise.all([
+            api.get("/shifts/current"),
+            api.get("/inventory/nozzles"),
+            api.get("/payment-accounts"),
+            api.get("/sales/credit-customers"),
+          ]);
         setShiftOpen(!!shiftRes.data);
         setNozzles(nozzlesRes.data);
         setPaymentAccounts(accountsRes.data);
@@ -172,7 +177,10 @@ export default function SalesPage() {
         const creditRes = await api.get("/sales/credit-customers");
         setCreditCustomers(creditRes.data);
       } catch (err: any) {
-        toast.error("Failed", err.response?.data?.message || "Failed to clear credit");
+        toast.error(
+          "Failed",
+          err.response?.data?.message || "Failed to clear credit",
+        );
       } finally {
         setIsLoading(false);
       }
@@ -185,16 +193,25 @@ export default function SalesPage() {
     }
 
     if (paymentMethod === "CREDIT" && (!customerName || !vehicleNumber)) {
-      toast.warning("Details Required", "Customer name and vehicle number required for credit");
+      toast.warning(
+        "Details Required",
+        "Customer name and vehicle number required for credit",
+      );
       return;
     }
 
     if (paymentMethod === "ONLINE" && !customerName) {
-      toast.warning("Name Required", "Sender name required for online transfer");
+      toast.warning(
+        "Name Required",
+        "Sender name required for online transfer",
+      );
       return;
     }
 
-    if ((paymentMethod === "CARD" || paymentMethod === "ONLINE") && !selectedAccount) {
+    if (
+      (paymentMethod === "CARD" || paymentMethod === "ONLINE") &&
+      !selectedAccount
+    ) {
       toast.warning("Account Required", "Please select payment account");
       return;
     }
@@ -227,7 +244,10 @@ export default function SalesPage() {
       setSelectedNozzle("");
       setTimeout(() => firstFieldRef.current?.focus(), 0);
     } catch (err: any) {
-      toast.error("Failed", err.response?.data?.message || "Failed to record sale");
+      toast.error(
+        "Failed",
+        err.response?.data?.message || "Failed to record sale",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -236,8 +256,8 @@ export default function SalesPage() {
   if (checkingShift) {
     return (
       <DashboardLayout>
-        <div className="flex h-screen items-center justify-center">
-          <Loader2 className="animate-spin text-red-600" />
+        <div className="flex h-[80vh] items-center justify-center">
+          <Loader2 className="animate-spin text-red-600 w-12 h-12" />
         </div>
       </DashboardLayout>
     );
@@ -247,59 +267,92 @@ export default function SalesPage() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-2xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
-            Record Sale
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-500 mt-1">
-            Select nozzle and enter amount or quantity
-          </p>
+      <div className="max-w-4xl mx-auto space-y-8 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
+              Record Sale
+            </h1>
+            <p className="text-zinc-500 mt-1 flex items-center gap-2">
+              <Receipt size={16} />
+              New Transaction Entry
+            </p>
+          </div>
+          {shiftOpen && (
+            <div className="px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Shift Active
+            </div>
+          )}
         </div>
 
         {!shiftOpen ? (
-          <div className="p-8 rounded-2xl border border-yellow-600/20 bg-yellow-600/5 text-yellow-500 text-sm flex flex-col items-center gap-4 text-center">
-            <AlertCircle size={32} />
-            <div>
-              <p className="font-bold text-lg">Shift Not Open</p>
-              <p className="opacity-80">
-                You must start a shift before recording sales.
+          <div className="p-12 rounded-3xl border border-dashed border-amber-500/30 bg-amber-500/5 text-amber-500 flex flex-col items-center gap-6 text-center animate-in fade-in zoom-in duration-500">
+            <div className="p-4 rounded-full bg-amber-500/10">
+              <AlertCircle size={48} />
+            </div>
+            <div className="space-y-2">
+              <h2 className="font-bold text-2xl text-amber-400">
+                Shift Not Started
+              </h2>
+              <p className="opacity-80 max-w-md mx-auto">
+                You must start a new shift before you can begin recording sales
+                transactions.
               </p>
             </div>
             <a
               href="/shifts"
-              className="px-6 py-2 rounded-full bg-yellow-600 text-white font-bold hover:bg-yellow-500 transition-all"
+              className="px-8 py-3 rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 hover:scale-105 transition-all shadow-lg shadow-amber-500/20"
             >
-              Go to Shifts
+              Start Shift Now
             </a>
           </div>
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="p-8 rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-white dark:bg-zinc-900/30 backdrop-blur-sm space-y-6"
+            className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-md shadow-2xl space-y-8"
           >
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="creditPayment"
-                checked={isCreditPayment}
-                onChange={(e) => {
-                  setIsCreditPayment(e.target.checked);
-                  setSelectedCustomer("");
-                  setAmount("");
-                }}
-                className="w-5 h-5 rounded border-zinc-300 dark:border-zinc-700 text-red-600 focus:ring-red-600"
-              />
-              <label htmlFor="creditPayment" className="text-sm font-semibold text-zinc-700 dark:text-zinc-400 cursor-pointer">
-                Clear Customer Credit
-              </label>
+            {/* Header / Toggle */}
+            <div className="flex items-center justify-between pb-6 border-b border-zinc-800">
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-zinc-200">
+                  Transaction Details
+                </h3>
+                <p className="text-xs text-zinc-500">
+                  Enter sale information below
+                </p>
+              </div>
+              <div className="flex items-center gap-3 bg-zinc-950/50 p-1.5 rounded-xl border border-zinc-800/50">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCreditPayment(false);
+                    setAmount("");
+                    setSelectedCustomer("");
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isCreditPayment ? "bg-zinc-800 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}
+                >
+                  Regular Sale
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCreditPayment(true);
+                    setAmount("");
+                    setSelectedCustomer("");
+                  }}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isCreditPayment ? "bg-red-600 text-white shadow-lg" : "text-zinc-500 hover:text-zinc-300"}`}
+                >
+                  Clear Credit
+                </button>
+              </div>
             </div>
 
             {isCreditPayment ? (
-              <>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                    Select Customer *
+              <div className="space-y-6 animate-in slide-in-from-right duration-300">
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    Select Customer <span className="text-red-500">*</span>
                   </label>
                   <select
                     ref={firstFieldRef}
@@ -307,93 +360,131 @@ export default function SalesPage() {
                     value={selectedCustomer}
                     onChange={(e) => setSelectedCustomer(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && selectedCustomer) {
+                      if (e.key === "Enter" && selectedCustomer) {
                         e.preventDefault();
                         amountRef.current?.focus();
                       }
                     }}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                    className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
                   >
                     <option value="">Choose Customer</option>
                     {creditCustomers.map((c) => (
                       <option key={c.name} value={c.name}>
-                        {c.name} - Rs. {c.amount.toFixed(2)}
+                        {c.name} - Remaining: Rs. {c.amount.toLocaleString()}
                       </option>
                     ))}
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                    Payment Amount (Rs.) *
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    Payment Amount (Rs.) <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    ref={amountRef}
-                    required
-                    type="number"
-                    step="any"
-                    max={maxPayable}
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        submitRef.current?.click();
-                      }
-                    }}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
-                    placeholder="0.00"
-                    disabled={!selectedCustomer}
-                  />
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">
+                      Rs.
+                    </span>
+                    <input
+                      ref={amountRef}
+                      required
+                      type="number"
+                      step="any"
+                      max={maxPayable}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          submitRef.current?.click();
+                        }
+                      }}
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-xl font-bold text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-700"
+                      placeholder="0.00"
+                      disabled={!selectedCustomer}
+                    />
+                  </div>
                   {selectedCustomer && (
-                    <p className="text-xs text-zinc-500">Maximum: Rs. {maxPayable.toFixed(2)}</p>
+                    <div className="flex items-center justify-between text-xs px-1">
+                      <span className="text-zinc-500">Maximum Payable</span>
+                      <span className="text-zinc-300 font-mono">
+                        Rs. {maxPayable.toLocaleString()}
+                      </span>
+                    </div>
                   )}
                 </div>
-              </>
+              </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                    Select Nozzle
+              <div className="space-y-6 animate-in slide-in-from-left duration-300">
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    Select Nozzle <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    ref={(el) => {
-                      nozzleRef.current = el;
-                      if (!isCreditPayment) (firstFieldRef as any).current = el;
-                    }}
-                    required
-                    value={selectedNozzle}
-                    onChange={(e) => setSelectedNozzle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && selectedNozzle) {
-                        e.preventDefault();
-                        amountRef.current?.focus();
-                      }
-                    }}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
-                  >
-                    <option value="">Choose Nozzle</option>
-                    {nozzles.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.name} - {n.tank?.product?.name} (Rs. {n.tank?.product?.sellingPrice}/L)
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <Fuel
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500"
+                      size={18}
+                    />
+                    <select
+                      ref={(el) => {
+                        nozzleRef.current = el;
+                        if (!isCreditPayment)
+                          (firstFieldRef as any).current = el;
+                      }}
+                      required
+                      value={selectedNozzle}
+                      onChange={(e) => setSelectedNozzle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && selectedNozzle) {
+                          e.preventDefault();
+                          amountRef.current?.focus();
+                        }
+                      }}
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl pl-12 pr-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
+                    >
+                      <option value="">Choose Dispensing Nozzle</option>
+                      {nozzles.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.name} — {n.tank?.product?.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {selectedNozzleData && (
-                    <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900 text-sm">
-                      <p className="text-blue-700 dark:text-blue-400">
-                        <strong>Tank:</strong> {selectedNozzleData.tank?.name} | 
-                        <strong> Product:</strong> {selectedNozzleData.tank?.product?.name} | 
-                        <strong> Price:</strong> Rs. {pricePerLiter}/L |
-                        <strong> Available:</strong> {availableStock.toFixed(2)}L
-                      </p>
+                    <div className="mt-2 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 flex flex-wrap gap-4 text-sm animate-in fade-in slide-in-from-top-2">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-blue-400 font-bold">
+                          Product
+                        </span>
+                        <span className="text-blue-100 font-medium">
+                          {selectedNozzleData.tank?.product?.name}
+                        </span>
+                      </div>
+                      <div className="w-px h-8 bg-blue-500/20"></div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-blue-400 font-bold">
+                          Price
+                        </span>
+                        <span className="text-blue-100 font-medium">
+                          Rs. {pricePerLiter}/L
+                        </span>
+                      </div>
+                      <div className="w-px h-8 bg-blue-500/20"></div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] uppercase text-blue-400 font-bold">
+                          Stock
+                        </span>
+                        <span className="text-blue-100 font-medium">
+                          {availableStock.toFixed(2)} L
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
                       Amount (Rs.)
                     </label>
                     <input
@@ -406,18 +497,18 @@ export default function SalesPage() {
                         setQuantity("");
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           e.preventDefault();
                           quantityRef.current?.focus();
                         }
                       }}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-xl font-bold text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-700"
                       placeholder="0.00"
                       disabled={!selectedNozzle}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
                       Quantity (L)
                     </label>
                     <input
@@ -430,12 +521,12 @@ export default function SalesPage() {
                         setAmount("");
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === "Enter") {
                           e.preventDefault();
                           paymentMethodRefs.current[0]?.focus();
                         }
                       }}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-xl font-bold text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-700"
                       placeholder="0.00"
                       disabled={!selectedNozzle}
                     />
@@ -443,20 +534,24 @@ export default function SalesPage() {
                 </div>
 
                 {showStockWarning && availableStock > 0 && (
-                  <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-900">
+                  <div className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/20 animate-pulse">
                     <div className="flex items-start gap-3">
-                      <AlertCircle className="text-orange-600 flex-shrink-0 mt-0.5" size={20} />
+                      <AlertCircle
+                        className="text-orange-500 flex-shrink-0 mt-0.5"
+                        size={20}
+                      />
                       <div className="flex-1">
-                        <p className="text-sm font-bold text-orange-700 dark:text-orange-400">
+                        <p className="text-sm font-bold text-orange-400">
                           Insufficient Stock
                         </p>
-                        <p className="text-sm text-orange-600 dark:text-orange-500 mt-1">
-                          Only {availableStock.toFixed(2)}L available (Rs. {(availableStock * pricePerLiter).toFixed(2)})
+                        <p className="text-sm text-orange-500/80 mt-1">
+                          Only {availableStock.toFixed(2)}L available (Rs.{" "}
+                          {(availableStock * pricePerLiter).toFixed(2)})
                         </p>
                         <button
                           type="button"
                           onClick={handleUseAvailable}
-                          className="mt-3 px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-bold hover:bg-orange-500 transition-all"
+                          className="mt-3 px-4 py-2 rounded-lg bg-orange-600 text-white text-xs font-bold hover:bg-orange-500 transition-all shadow-lg"
                         >
                           Use Available Stock
                         </button>
@@ -465,31 +560,35 @@ export default function SalesPage() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
                     Payment Method
                   </label>
-                  <div 
+                  <div
                     className="grid grid-cols-4 gap-3"
                     onKeyDown={(e) => {
-                      const methods = ['CASH', 'CARD', 'ONLINE', 'CREDIT'];
+                      const methods = ["CASH", "CARD", "ONLINE", "CREDIT"];
                       const currentIndex = methods.indexOf(paymentMethod);
-                      
-                      if (e.key === 'ArrowRight') {
+
+                      if (e.key === "ArrowRight") {
                         e.preventDefault();
                         const nextIndex = (currentIndex + 1) % methods.length;
                         setPaymentMethod(methods[nextIndex] as any);
                         paymentMethodRefs.current[nextIndex]?.focus();
-                      } else if (e.key === 'ArrowLeft') {
+                      } else if (e.key === "ArrowLeft") {
                         e.preventDefault();
-                        const prevIndex = (currentIndex - 1 + methods.length) % methods.length;
+                        const prevIndex =
+                          (currentIndex - 1 + methods.length) % methods.length;
                         setPaymentMethod(methods[prevIndex] as any);
                         paymentMethodRefs.current[prevIndex]?.focus();
-                      } else if (e.key === 'Enter') {
+                      } else if (e.key === "Enter") {
                         e.preventDefault();
-                        if (paymentMethod === 'CARD' || paymentMethod === 'ONLINE') {
+                        if (
+                          paymentMethod === "CARD" ||
+                          paymentMethod === "ONLINE"
+                        ) {
                           accountRef.current?.focus();
-                        } else if (paymentMethod === 'CREDIT') {
+                        } else if (paymentMethod === "CREDIT") {
                           customerNameRef.current?.focus();
                         } else {
                           descriptionRef.current?.focus();
@@ -505,27 +604,31 @@ export default function SalesPage() {
                     ].map((method, index) => (
                       <button
                         key={method.value}
-                        ref={(el) => (paymentMethodRefs.current[index] = el)}
+                        ref={(el) => {
+                          if (el) paymentMethodRefs.current[index] = el;
+                        }}
                         type="button"
                         onClick={() => setPaymentMethod(method.value as any)}
                         className={cn(
-                          "flex flex-col items-center gap-2 p-4 rounded-xl border transition-all",
+                          "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
                           paymentMethod === method.value
-                            ? "border-red-600 bg-red-600/10 text-red-600"
-                            : "border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700",
+                            ? "border-red-600 bg-red-600 text-white shadow-[0_0_20px_rgba(220,38,38,0.3)] transform scale-105"
+                            : "border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-300",
                         )}
                       >
                         <method.icon size={20} />
-                        <span className="font-bold text-xs">{method.label}</span>
+                        <span className="font-bold text-[10px] uppercase tracking-wider">
+                          {method.label}
+                        </span>
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {(paymentMethod === "CARD" || paymentMethod === "ONLINE") && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                      Select Account *
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                      Select Account <span className="text-red-500">*</span>
                     </label>
                     <select
                       ref={accountRef}
@@ -533,57 +636,73 @@ export default function SalesPage() {
                       value={selectedAccount}
                       onChange={(e) => setSelectedAccount(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && selectedAccount) {
+                        if (e.key === "Enter" && selectedAccount) {
                           e.preventDefault();
-                          if (paymentMethod === 'ONLINE') {
+                          if (paymentMethod === "ONLINE") {
                             customerNameRef.current?.focus();
                           } else {
                             descriptionRef.current?.focus();
                           }
                         }
                       }}
-                      className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
                     >
-                      <option value="">Choose Account</option>
+                      <option value="">Choose Payment Account</option>
                       {paymentAccounts
                         .filter((acc) => acc.type === paymentMethod)
                         .map((acc) => (
                           <option key={acc.id} value={acc.id}>
-                            {acc.name} {acc.accountNumber ? `(${acc.accountNumber})` : ''}
+                            {acc.name}{" "}
+                            {acc.accountNumber ? `(${acc.accountNumber})` : ""}
                           </option>
                         ))}
                     </select>
                   </div>
                 )}
 
-                {(paymentMethod === "CARD" || paymentMethod === "ONLINE" || paymentMethod === "CREDIT") && (
-                  <div className="space-y-4 p-4 rounded-xl bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900">
+                {(paymentMethod === "CARD" ||
+                  paymentMethod === "ONLINE" ||
+                  paymentMethod === "CREDIT") && (
+                  <div className="space-y-4 p-5 rounded-2xl bg-zinc-950/30 border border-zinc-800/50 animate-in fade-in slide-in-from-top-2">
                     {paymentMethod === "CREDIT" && (
-                      <div className="space-y-2">
-                        <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                          Existing Customer (Optional)
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                          Existing Customer{" "}
+                          <span className="text-zinc-700">(Optional)</span>
                         </label>
                         <select
                           value={customerName}
                           onChange={(e) => {
-                            const selected = creditCustomers.find((c) => c.name === e.target.value);
-                            setCustomerName(e.target.value);
-                            if (selected?.vehicle) setVehicleNumber(selected.vehicle);
+                            const val = e.target.value;
+                            const selected = creditCustomers.find(
+                              (c) => c.name === val,
+                            );
+                            setCustomerName(val);
+                            if (selected?.vehicle) {
+                              setVehicleNumber(selected.vehicle);
+                            } else if (!val) {
+                              setVehicleNumber("");
+                            }
                           }}
-                          className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-300 focus:border-red-600 outline-none transition-all"
                         >
                           <option value="">New Customer</option>
                           {creditCustomers.map((c) => (
                             <option key={c.name} value={c.name}>
-                              {c.name} {c.vehicle ? `(${c.vehicle})` : ''}
+                              {c.name} {c.vehicle ? `(${c.vehicle})` : ""}
                             </option>
                           ))}
                         </select>
                       </div>
                     )}
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                        {paymentMethod === "CREDIT" ? "Customer Name *" : "Sender Name"} {paymentMethod === "CARD" ? "(Optional)" : paymentMethod === "ONLINE" ? "*" : ""}
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                        {paymentMethod === "CREDIT"
+                          ? "Customer Name"
+                          : "Sender Name"}{" "}
+                        {paymentMethod === "CREDIT" && (
+                          <span className="text-red-500">*</span>
+                        )}
                       </label>
                       <input
                         ref={customerNameRef}
@@ -591,18 +710,25 @@ export default function SalesPage() {
                         value={customerName}
                         onChange={(e) => setCustomerName(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          if (e.key === "Enter") {
                             e.preventDefault();
                             vehicleRef.current?.focus();
                           }
                         }}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
-                        placeholder={paymentMethod === "CREDIT" ? "Enter customer name" : "Enter sender name"}
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-700"
+                        placeholder={
+                          paymentMethod === "CREDIT"
+                            ? "Enter customer name"
+                            : "Enter sender name"
+                        }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                        Vehicle Number {paymentMethod === "CREDIT" ? "*" : "(Optional)"}
+                    <div className="space-y-3">
+                      <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                        Vehicle Number{" "}
+                        {paymentMethod === "CREDIT" && (
+                          <span className="text-red-500">*</span>
+                        )}
                       </label>
                       <input
                         ref={vehicleRef}
@@ -610,51 +736,52 @@ export default function SalesPage() {
                         value={vehicleNumber}
                         onChange={(e) => setVehicleNumber(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
+                          if (e.key === "Enter") {
                             e.preventDefault();
                             descriptionRef.current?.focus();
                           }
                         }}
-                        className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-700"
                         placeholder="e.g., ABC-123"
                       />
                     </div>
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-400">
-                    Description (Optional)
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    Description{" "}
+                    <span className="text-zinc-700">(Optional)</span>
                   </label>
                   <textarea
                     ref={descriptionRef}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
+                      if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
                         submitRef.current?.click();
                       }
                     }}
-                    className="w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl p-4 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none h-20 resize-none"
-                    placeholder="Vehicle number, customer name, etc."
+                    className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl p-4 text-zinc-100 focus:border-red-600 outline-none h-24 resize-none placeholder:text-zinc-700"
+                    placeholder="Vehicle number, customer name, notes..."
                   />
                 </div>
-              </>
+              </div>
             )}
 
             <button
               ref={submitRef}
               type="submit"
               disabled={isLoading || (!isCreditPayment && !selectedNozzle)}
-              className="w-full py-4 rounded-xl bg-red-600 text-white font-bold text-lg hover:bg-red-500 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full py-4 rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-lg hover:to-red-400 active:scale-[0.99] transition-all flex items-center justify-center gap-3 disabled:opacity-50 disabled:grayscale shadow-lg shadow-red-900/20"
             >
               {isLoading ? (
                 <Loader2 className="animate-spin" />
               ) : (
                 <Plus size={24} />
               )}
-              {isCreditPayment ? "Clear Credit" : "Record Sale"}
+              {isCreditPayment ? "Clear Credit Balance" : "Record Transaction"}
             </button>
           </form>
         )}

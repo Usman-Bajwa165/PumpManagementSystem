@@ -36,27 +36,41 @@ export class AccountingService implements OnModuleInit {
     }
   }
 
-  async createTransaction(data: {
-    debitCode: string;
-    creditCode: string;
-    amount: number;
-    profit?: number;
-    description?: string;
-    shiftId?: string;
-  }) {
-    const debitAcc = await this.prisma.account.findUnique({
+  async createTransaction(
+    data: {
+      debitCode: string;
+      creditCode: string;
+      amount: number;
+      profit?: number;
+      description?: string;
+      shiftId?: string | null;
+      supplierId?: string;
+      customerId?: string;
+      createdById?: string;
+      paymentAccountId?: string;
+      nozzleId?: string;
+      productId?: string;
+      quantity?: number;
+    },
+    prismaTx?: any, // Should be Prisma.TransactionClient but 'any' avoids import issues for now
+  ) {
+    const prisma = prismaTx || this.prisma;
+
+    const debitAcc = await prisma.account.findUnique({
       where: { code: data.debitCode },
     });
-    const creditAcc = await this.prisma.account.findUnique({
+    const creditAcc = await prisma.account.findUnique({
       where: { code: data.creditCode },
     });
 
     if (!debitAcc || !creditAcc) {
-      throw new Error('Invalid account codes');
+      throw new Error(
+        `Invalid account codes: ${data.debitCode} or ${data.creditCode}`,
+      );
     }
 
     // Create transaction record
-    const tx = await this.prisma.transaction.create({
+    const tx = await prisma.transaction.create({
       data: {
         debitAccountId: debitAcc.id,
         creditAccountId: creditAcc.id,
@@ -64,6 +78,13 @@ export class AccountingService implements OnModuleInit {
         profit: data.profit,
         description: data.description,
         shiftId: data.shiftId,
+        supplierId: data.supplierId,
+        customerId: data.customerId,
+        createdById: data.createdById,
+        paymentAccountId: data.paymentAccountId,
+        nozzleId: data.nozzleId,
+        productId: data.productId,
+        quantity: data.quantity,
       },
     });
 

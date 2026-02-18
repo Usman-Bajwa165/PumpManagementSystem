@@ -18,4 +18,14 @@ export class PaymentAccountsService {
   async delete(id: string) {
     return this.prisma.paymentAccount.delete({ where: { id } });
   }
+
+  async update(
+    id: string,
+    data: { name?: string; type?: string; accountNumber?: string },
+  ) {
+    return this.prisma.paymentAccount.update({
+      where: { id },
+      data,
+    });
+  }
 }

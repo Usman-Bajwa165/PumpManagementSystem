@@ -23,7 +23,7 @@ export class InventoryService {
   }
 
   async getProducts() {
-    return this.prisma.product.findMany({ 
+    return this.prisma.product.findMany({
       include: { tanks: true },
       orderBy: { name: 'asc' },
     });
@@ -47,13 +47,13 @@ export class InventoryService {
   }
 
   async getNozzles() {
-    return this.prisma.nozzle.findMany({ 
-      include: { 
-        tank: { 
-          include: { 
-            product: true 
-          } 
-        } 
+    return this.prisma.nozzle.findMany({
+      include: {
+        tank: {
+          include: {
+            product: true,
+          },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -63,34 +63,112 @@ export class InventoryService {
   async purchaseProduct(userId: string, dto: PurchaseProductDto) {
     const tank = await this.prisma.tank.findUnique({
       where: { id: dto.tankId },
+      include: { product: true },
     });
     if (!tank) throw new BadRequestException('Tank not found');
 
+    // Verify supplier exists if ID is provided, or throw if required
+    if (!dto.supplierId) {
+      throw new BadRequestException('Supplier is required');
+    }
+
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: dto.supplierId },
+    });
+    if (!supplier) throw new BadRequestException('Supplier not found');
+
     const oldStock = Number(tank.currentStock);
-
-    // Update Stock
-    await this.prisma.tank.update({
-      where: { id: dto.tankId },
-      data: { currentStock: { increment: dto.quantity } },
-    });
-
     const newStock = oldStock + dto.quantity;
+    const rate = dto.cost / dto.quantity;
 
-    // Accounting Entry:
-    // Debit: Fuel Inventory (Asset)
-    // Credit: Accounts Payable (Liability) or Cash (Asset)
+    // Use a transaction for atomicity
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Update Tank Stock
+      await tx.tank.update({
+        where: { id: dto.tankId },
+        data: { currentStock: { increment: dto.quantity } },
+      });
 
-    await this.accountingService.createTransaction({
-      debitCode: '10401', // Fuel Inventory
-      creditCode: '20101', // Accounts Payable
-      amount: dto.cost,
-      description: `Purchase ${dto.quantity}L for ${tank.name} from ${dto.supplier}`,
+      // 2. Create Purchase Record
+      const purchase = await tx.purchase.create({
+        data: {
+          tankId: dto.tankId,
+          supplierId: dto.supplierId!, // Assert non-null since we checked
+          quantity: dto.quantity,
+          totalCost: dto.cost,
+          rate: rate,
+          status: (dto.paymentStatus as any) || 'UNPAID',
+        },
+      });
+
+      // 3. Accounting
+      // Debit Inventory (Asset)
+      // Code 10401
+
+      let remainingToPay = dto.cost;
+      if (
+        dto.paymentStatus === 'PAID' ||
+        (dto.paymentStatus === 'PARTIAL' && (dto.paidAmount ?? 0) > 0)
+      ) {
+        const paid =
+          dto.paymentStatus === 'PAID' ? dto.cost : dto.paidAmount || 0;
+
+        // Credit Cash (Asset) -> Decreases
+        await this.accountingService.createTransaction(
+          {
+            debitCode: '10401', // Inventory
+            creditCode: '10101', // Cash
+            amount: paid,
+            description: `Purchase Payment (Stock) for ${tank.name}`,
+            shiftId: null, // Admin action
+          },
+          tx,
+        ); // Pass tx
+
+        remainingToPay -= paid;
+      }
+
+      if (remainingToPay > 0 && dto.supplierId) {
+        // Update Supplier Balance
+        await tx.supplier.update({
+          where: { id: dto.supplierId },
+          data: { balance: { increment: remainingToPay } },
+        });
+
+        // Create Accounting Entry
+        await this.accountingService.createTransaction(
+          {
+            debitCode: '10401', // Inventory
+            creditCode: '20101', // Accounts Payable
+            amount: remainingToPay,
+            description: `Credit Purchase from ${supplier?.name}`,
+            supplierId: dto.supplierId,
+          },
+          tx,
+        );
+      }
     });
 
-    // Get user info
+    // Notifications (keep existing logic outside transaction for speed or inside for consistency, outside is fine)
+    // ... (omitted for brevity, assume kept or re-added if whole block replaced)
+    // Re-adding notification logic helper
+    this.notifyPurchase(userId, dto, tank, newStock).catch(console.error);
+
+    return {
+      message: 'Purchase recorded successfully',
+      newStock,
+    };
+  }
+
+  // Helper for notifications to avoid clutter
+  private async notifyPurchase(
+    userId: string,
+    dto: PurchaseProductDto,
+    tank: any,
+    newStock: number,
+  ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     const prefs = await this.prisma.notificationPreferences.findFirst();
-    
     if (prefs?.stockNotifications) {
       this.whatsappService
         .notifyStockChange(prefs.phoneNumber, {
@@ -103,11 +181,6 @@ export class InventoryService {
         })
         .catch(() => {});
     }
-
-    return {
-      message: 'Purchase recorded successfully',
-      newStock,
-    };
   }
 
   // Tank Dip / Stock Check
@@ -119,7 +192,15 @@ export class InventoryService {
     if (!tank) throw new BadRequestException('Tank not found');
 
     const systemStock = Number(tank.currentStock);
+    const capacity = Number(tank.capacity);
     const physicalStock = dto.dipReading;
+
+    if (physicalStock > capacity) {
+      throw new BadRequestException(
+        `Dip reading (${physicalStock}L) cannot exceed tank capacity (${capacity}L)`,
+      );
+    }
+
     const variance = physicalStock - systemStock;
 
     // Record Dip
@@ -183,14 +264,16 @@ export class InventoryService {
     // Check for low fuel after adjustment
     const percentage = (physicalStock / Number(tank.capacity)) * 100;
     if (prefs?.inventoryNotifications && percentage < prefs.lowFuelThreshold) {
-      this.whatsappService.notifyLowFuel(
-        prefs.phoneNumber,
-        tank.name,
-        tank.product.name,
-        physicalStock,
-        Number(tank.capacity),
-        percentage,
-      ).catch(() => {});
+      this.whatsappService
+        .notifyLowFuel(
+          prefs.phoneNumber,
+          tank.name,
+          tank.product.name,
+          physicalStock,
+          Number(tank.capacity),
+          percentage,
+        )
+        .catch(() => {});
     }
 
     return {
@@ -204,7 +287,10 @@ export class InventoryService {
     return this.prisma.product.delete({ where: { id } });
   }
 
-  async updateProduct(id: string, data: { sellingPrice?: number; purchasePrice?: number }) {
+  async updateProduct(
+    id: string,
+    data: { sellingPrice?: number; purchasePrice?: number },
+  ) {
     return this.prisma.product.update({
       where: { id },
       data,

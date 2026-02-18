@@ -19,20 +19,79 @@ import {
   Wallet,
   ChevronLeft,
   ChevronRight,
+  Truck,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
-  { name: "Shifts", href: "/shifts", icon: Fuel, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
-  { name: "Sales", href: "/sales", icon: ShoppingCart, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
-  { name: "Inventory", href: "/inventory", icon: BookOpen, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
-  { name: "Setup", href: "/setup", icon: Settings, roles: ["ADMIN", "MANAGER", "OPERATOR"] },
-  { name: "Reports", href: "/reports", icon: BarChart3, roles: ["ADMIN", "MANAGER"] },
-  { name: "Accounts", href: "/accounts", icon: Wallet, roles: ["ADMIN", "MANAGER"] },
+  {
+    name: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    roles: ["ADMIN", "MANAGER", "OPERATOR"],
+  },
+  {
+    name: "Shifts",
+    href: "/shifts",
+    icon: Fuel,
+    roles: ["ADMIN", "MANAGER", "OPERATOR"],
+  },
+  {
+    name: "Sales",
+    href: "/sales",
+    icon: ShoppingCart,
+    roles: ["ADMIN", "MANAGER", "OPERATOR"],
+  },
+  {
+    name: "Inventory",
+    href: "/inventory",
+    icon: BookOpen,
+    roles: ["ADMIN", "MANAGER", "OPERATOR"],
+  },
+  {
+    name: "Suppliers",
+    href: "/suppliers",
+    icon: Truck,
+    roles: ["ADMIN", "MANAGER"],
+  },
+  {
+    name: "Expenses",
+    href: "/expenses",
+    icon: Receipt,
+    roles: ["ADMIN", "MANAGER"],
+  },
+  {
+    name: "Setup",
+    href: "/setup",
+    icon: Settings,
+    roles: ["ADMIN", "MANAGER", "OPERATOR"],
+  },
+  {
+    name: "Reports",
+    href: "/reports",
+    icon: BarChart3,
+    roles: ["ADMIN", "MANAGER"],
+  },
+  {
+    name: "Accounts",
+    href: "/accounts",
+    icon: Wallet,
+    roles: ["ADMIN", "MANAGER"],
+  },
   { name: "Users", href: "/users", icon: User, roles: ["ADMIN"] },
-  { name: "WhatsApp", href: "/whatsapp", icon: MessageSquare, roles: ["ADMIN", "MANAGER"] },
-  { name: "Backups", href: "/backup", icon: Database, roles: ["ADMIN", "MANAGER"] },
+  {
+    name: "WhatsApp",
+    href: "/whatsapp",
+    icon: MessageSquare,
+    roles: ["ADMIN", "MANAGER"],
+  },
+  {
+    name: "Backups",
+    href: "/backup",
+    icon: Database,
+    roles: ["ADMIN", "MANAGER"],
+  },
 ];
 
 export default function Sidebar() {
@@ -41,10 +100,12 @@ export default function Sidebar() {
   const { isCollapsed, toggleSidebar } = useSidebar();
 
   return (
-    <div className={cn(
-      "flex h-screen flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 transition-all duration-300",
-      isCollapsed ? "w-16" : "w-64"
-    )}>
+    <div
+      className={cn(
+        "flex h-screen flex-col border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-600 dark:text-zinc-400 transition-all duration-300",
+        isCollapsed ? "w-16" : "w-64",
+      )}
+    >
       <div className="flex h-16 items-center justify-between px-4">
         {!isCollapsed && (
           <>
@@ -78,7 +139,7 @@ export default function Sidebar() {
                   isActive
                     ? "bg-red-600/10 text-red-500"
                     : "hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-zinc-100",
-                  isCollapsed && "justify-center"
+                  isCollapsed && "justify-center",
                 )}
               >
                 <item.icon
@@ -87,7 +148,7 @@ export default function Sidebar() {
                     isActive
                       ? "text-red-500"
                       : "text-zinc-400 dark:text-zinc-500 group-hover:text-zinc-900 dark:group-hover:text-zinc-100",
-                    !isCollapsed && "mr-3"
+                    !isCollapsed && "mr-3",
                   )}
                 />
                 {!isCollapsed && item.name}
@@ -124,7 +185,7 @@ export default function Sidebar() {
           title={isCollapsed ? "Logout" : ""}
           className={cn(
             "flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-red-500",
-            isCollapsed && "justify-center"
+            isCollapsed && "justify-center",
           )}
         >
           <LogOut className={cn("h-5 w-5", !isCollapsed && "mr-3")} />

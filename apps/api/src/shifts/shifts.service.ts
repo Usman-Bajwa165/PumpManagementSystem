@@ -27,7 +27,9 @@ export class ShiftsService {
           'ShiftsService',
           userId,
         );
-        throw new BadRequestException('Cannot start shift. No nozzles are configured in the system.');
+        throw new BadRequestException(
+          'Cannot start shift. No nozzles are configured in the system.',
+        );
       }
 
       const openShift = await this.prisma.shift.findFirst({
@@ -43,7 +45,7 @@ export class ShiftsService {
         throw new BadRequestException('A shift is already open.');
       }
 
-      const readingsData = nozzles.map(n => ({
+      const readingsData = nozzles.map((n) => ({
         nozzle: n.name,
         reading: Number(n.lastReading),
         product: n.tank.product.name,
@@ -79,7 +81,7 @@ export class ShiftsService {
         const prefs = await this.prisma.notificationPreferences.findFirst();
         if (prefs?.shiftNotifications) {
           let msg = `🚀 *Shift Started* 🚀\nBy: ${shift.opener.username}\n\n*Opening Readings:*\n`;
-          readingsData.forEach(r => {
+          readingsData.forEach((r) => {
             msg += `${r.nozzle} (${r.product}): ${r.reading}L\n`;
           });
           const now = new Date();
@@ -96,7 +98,9 @@ export class ShiftsService {
             timeZone: 'Asia/Karachi',
           });
           msg += `\nOn: ${dateStr} ${timeStr}`;
-          this.whatsappService.sendMessage(prefs.phoneNumber, msg).catch(() => {});
+          this.whatsappService
+            .sendMessage(prefs.phoneNumber, msg)
+            .catch(() => {});
         }
       } catch (err) {
         this.logger.error(
@@ -121,9 +125,13 @@ export class ShiftsService {
   async getCurrentShift() {
     return this.prisma.shift.findFirst({
       where: { status: ShiftStatus.OPEN },
-      include: { 
-        readings: { include: { nozzle: { include: { tank: { include: { product: true } } } } } }, 
-        opener: true 
+      include: {
+        readings: {
+          include: {
+            nozzle: { include: { tank: { include: { product: true } } } },
+          },
+        },
+        opener: true,
       },
     });
   }
@@ -203,7 +211,9 @@ export class ShiftsService {
         }
       }
 
-      const closer = await this.prisma.user.findUnique({ where: { id: userId } });
+      const closer = await this.prisma.user.findUnique({
+        where: { id: userId },
+      });
 
       const updatedShift = await this.prisma.shift.update({
         where: { id: shift.id },
@@ -225,9 +235,11 @@ export class ShiftsService {
       try {
         const prefs = await this.prisma.notificationPreferences.findFirst();
         if (prefs?.shiftNotifications && closer) {
-          const summary = await this.reportsService.getDailySaleSummary(updatedShift.id);
+          const summary = await this.reportsService.getDailySaleSummary(
+            updatedShift.id,
+          );
           let msg = `🏁 *Shift Closed* 🏁\nBy: ${closer.username}\n\n*Closing Readings:*\n`;
-          readingsData.forEach(r => {
+          readingsData.forEach((r) => {
             msg += `${r.nozzle} (${r.product}):\n  Opening: ${r.opening}L\n  Closing: ${r.closing}L\n  Sold: ${r.sold}L\n\n`;
           });
           msg += `*Sales Summary:*\nTotal: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCredit: Rs. ${summary.creditSales}`;
@@ -245,7 +257,9 @@ export class ShiftsService {
             timeZone: 'Asia/Karachi',
           });
           msg += `\n\nOn: ${dateStr} ${timeStr}`;
-          this.whatsappService.sendMessage(prefs.phoneNumber, msg).catch(() => {});
+          this.whatsappService
+            .sendMessage(prefs.phoneNumber, msg)
+            .catch(() => {});
         }
       } catch (err) {
         this.logger.error(
@@ -293,10 +307,13 @@ export class ShiftsService {
       }
 
       const openShift = await this.getCurrentShift();
-      
+
       // If no shift is open, start a new one
       if (!openShift) {
-        this.logger.log('No open shift found. Starting new shift automatically.', 'ShiftsService');
+        this.logger.log(
+          'No open shift found. Starting new shift automatically.',
+          'ShiftsService',
+        );
         const users = await this.prisma.user.findMany({ take: 1 });
         if (users.length > 0) {
           await this.startShift(users[0].id);
@@ -306,7 +323,7 @@ export class ShiftsService {
       }
 
       // Close existing shift with current readings
-      const readings = openShift.readings.map(r => ({
+      const readings = openShift.readings.map((r) => ({
         nozzleId: r.nozzleId,
         closingReading: Number(r.nozzle.lastReading),
       }));
@@ -315,7 +332,7 @@ export class ShiftsService {
       await this.closeShift(systemUserId, readings);
       this.logger.log('Auto-closed shift at 12:00', 'ShiftsService');
 
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       await this.startShift(systemUserId);
       this.logger.log('Auto-started new shift at 12:00', 'ShiftsService');
@@ -326,5 +343,15 @@ export class ShiftsService {
         'ShiftsService',
       );
     }
+  }
+  async findAll(limit: number = 50) {
+    return this.prisma.shift.findMany({
+      take: limit,
+      orderBy: { startTime: 'desc' },
+      include: {
+        opener: { select: { username: true } },
+        closer: { select: { username: true } },
+      },
+    });
   }
 }

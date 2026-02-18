@@ -3,7 +3,16 @@
 import React, { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
-import { Play, Square, AlertCircle, Loader2, Clock } from "lucide-react";
+import {
+  Play,
+  Square,
+  AlertCircle,
+  Loader2,
+  Clock,
+  CheckCircle2,
+  Moon,
+  Sun,
+} from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
 
@@ -12,6 +21,11 @@ interface NozzleReading {
   nozzle: {
     name: string;
     lastReading: number;
+    tank: {
+      product: {
+        name: string;
+      };
+    };
   };
   openingReading: number;
 }
@@ -28,7 +42,9 @@ export default function ShiftsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [nozzles, setNozzles] = useState<any[]>([]);
-  const [closingReadings, setClosingReadings] = useState<Record<string, number>>({});
+  const [closingReadings, setClosingReadings] = useState<
+    Record<string, number>
+  >({});
   const [error, setError] = useState("");
   const [autoCloseEnabled, setAutoCloseEnabled] = useState(false);
   const toast = useToast();
@@ -46,8 +62,7 @@ export default function ShiftsPage() {
       setCurrentShift(shift);
       setNozzles(nozzlesRes.data);
       setAutoCloseEnabled(autoCloseRes.data.enabled);
-      
-      // Prefill closing readings with current nozzle readings
+
       if (shift?.readings) {
         const prefilled: Record<string, number> = {};
         shift.readings.forEach((reading) => {
@@ -69,7 +84,8 @@ export default function ShiftsPage() {
   const formatShiftTime = (dateStr: string) => {
     const date = new Date(dateStr);
     const hours = date.getHours();
-    const period = hours >= 12 ? "Night" : "Morning";
+    const period = hours >= 12 ? "Night Shift" : "Day Shift";
+    const icon = hours >= 12 ? Moon : Sun;
     const formattedDate = date.toLocaleDateString("en-GB", {
       day: "2-digit",
       month: "short",
@@ -80,7 +96,7 @@ export default function ShiftsPage() {
       minute: "2-digit",
       hour12: true,
     });
-    return { date: formattedDate, time: formattedTime, period };
+    return { date: formattedDate, time: formattedTime, period, Icon: icon };
   };
 
   const handleStartShift = async () => {
@@ -121,7 +137,10 @@ export default function ShiftsPage() {
       await api.post("/shifts/end", { readings });
       setCurrentShift(null);
       setClosingReadings({});
-      toast.success("Shift Closed", "Shift ended and sales calculated successfully.");
+      toast.success(
+        "Shift Closed",
+        "Shift ended and sales calculated successfully.",
+      );
     } catch (err: any) {
       const errorMsg = err.response?.data?.message || "Failed to end shift";
       setError(errorMsg);
@@ -140,179 +159,216 @@ export default function ShiftsPage() {
         "Auto-Close Updated",
         newValue
           ? "Shifts will auto-close at 12:00 AM/PM"
-          : "Auto-close disabled"
+          : "Auto-close disabled",
       );
     } catch (err: any) {
-      toast.error("Failed", err.response?.data?.message || "Failed to update setting");
+      toast.error(
+        "Failed",
+        err.response?.data?.message || "Failed to update setting",
+      );
     }
   };
 
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="flex h-[400px] items-center justify-center">
-          <Loader2 className="animate-spin text-red-600" />
+        <div className="flex h-[80vh] items-center justify-center">
+          <Loader2 className="animate-spin text-red-600 w-12 h-12" />
         </div>
       </DashboardLayout>
     );
   }
 
-  const shiftInfo = currentShift ? formatShiftTime(currentShift.startTime) : null;
+  const shiftInfo = currentShift
+    ? formatShiftTime(currentShift.startTime)
+    : null;
 
   return (
     <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 italic tracking-tight">
-            Shift Management
-          </h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-500 mt-1">
-            Control station operations and nozzle readings.
-          </p>
-        </div>
-
-        <div className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Clock className="text-blue-500" size={20} />
-            <div>
-              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Auto-Close Shifts at 12:00 AM/PM
-              </p>
-              <p className="text-xs text-zinc-500">
-                Automatically close and start new shifts at midnight and noon
-              </p>
-            </div>
+      <div className="max-w-5xl mx-auto space-y-8 p-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
+              Shift Management
+            </h1>
+            <p className="text-zinc-500 mt-1 flex items-center gap-2">
+              <Clock size={16} />
+              Control station operations and closings
+            </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoCloseEnabled}
-              onChange={handleToggleAutoClose}
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-zinc-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-300 dark:peer-focus:ring-red-800 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-zinc-600 peer-checked:bg-red-600"></div>
-          </label>
+
+          <div className="p-1.5 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center gap-4 pr-6 pl-4 py-3 backdrop-blur-sm">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">
+                Auto-Close Shift
+              </span>
+              <span className="text-xs text-zinc-300">
+                Daily at 12:00 AM/PM
+              </span>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoCloseEnabled}
+                onChange={handleToggleAutoClose}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-focus:ring-2 peer-focus:ring-red-900 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600 peer-checked:after:bg-white"></div>
+            </label>
+          </div>
         </div>
 
         {error && (
-          <div className="p-4 rounded-xl bg-red-600/10 border border-red-600/20 text-red-500 text-sm flex items-center gap-3">
-            <AlertCircle size={18} />
+          <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm flex items-center gap-3 animate-in slide-in-from-top-2">
+            <AlertCircle size={18} className="shrink-0" />
             {error}
           </div>
         )}
 
         {!currentShift ? (
-          <div className="p-12 rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-white dark:bg-zinc-900/40 text-center space-y-6">
-            <div className="mx-auto h-20 w-20 rounded-full bg-zinc-100 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-400 dark:text-zinc-600">
-              <Square size={32} />
+          <div className="p-16 rounded-3xl border border-dashed border-zinc-800 bg-zinc-900/20 text-center space-y-8 animate-in fade-in zoom-in duration-500">
+            <div className="relative mx-auto h-24 w-24">
+              <div className="absolute inset-0 bg-red-600/20 blur-xl rounded-full animate-pulse" />
+              <div className="relative h-full w-full rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+                <Square size={40} />
+              </div>
             </div>
-            <div>
-              <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-                No Active Shift
+
+            <div className="space-y-2">
+              <h2 className="text-2xl font-bold text-zinc-100">
+                Functionality Halted
               </h2>
-              <p className="text-sm text-zinc-600 dark:text-zinc-500 max-w-xs mx-auto mt-2">
+              <p className="text-zinc-500 max-w-md mx-auto">
                 {nozzles.length === 0
                   ? "Cannot start shift. No nozzles are configured in the system."
-                  : "Station is currently offline. Start a new shift to record sales and manage stock."}
+                  : "The station is currently offline. Start a new shift to begin recording sales and tracking inventory."}
               </p>
             </div>
+
             {nozzles.length > 0 && (
               <button
                 onClick={handleStartShift}
                 disabled={isSubmitting}
-                className="px-8 py-3 rounded-full bg-red-600 text-white font-semibold hover:bg-red-500 transition-all flex items-center gap-2 mx-auto disabled:opacity-50"
+                className="group relative px-8 py-4 rounded-xl bg-gradient-to-r from-red-600 to-red-500 text-white font-bold text-lg hover:to-red-400 transition-all flex items-center gap-3 mx-auto disabled:opacity-50 hover:shadow-lg hover:shadow-red-900/20"
               >
                 {isSubmitting ? (
                   <Loader2 className="animate-spin h-5 w-5" />
                 ) : (
-                  <Play size={20} />
+                  <Play size={20} fill="currentColor" />
                 )}
-                Start Shift
+                Start Operations
               </button>
             )}
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="p-6 rounded-2xl border border-red-600/20 bg-red-600/5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="h-4 w-4 rounded-full bg-red-600 animate-pulse shadow-[0_0_10px_rgba(220,38,36,0.5)]" />
+            <div className="p-6 rounded-3xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="flex items-center gap-6 relative z-10">
+                <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
+                  {shiftInfo?.Icon && <shiftInfo.Icon size={32} />}
+                </div>
                 <div>
-                  <p className="text-sm font-semibold text-red-500 uppercase tracking-widest text-[10px]">
-                    Active Shift
-                  </p>
-                  <h3 className="text-zinc-900 dark:text-zinc-100 font-bold">
-                    {shiftInfo?.date} - {shiftInfo?.period}
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <p className="text-xs font-bold text-emerald-500 uppercase tracking-widest">
+                      Active Shift
+                    </p>
+                  </div>
+                  <h3 className="text-2xl font-bold text-zinc-100">
+                    {shiftInfo?.period} ({shiftInfo?.date})
                   </h3>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] text-zinc-500 uppercase font-bold">
-                  Started At
+
+              <div className="text-center md:text-right relative z-10 bg-zinc-950/30 px-6 py-3 rounded-xl border border-zinc-800/50">
+                <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider mb-1">
+                  Shift Started At
                 </p>
-                <p className="text-sm text-zinc-700 dark:text-zinc-300">
+                <p className="text-xl font-mono text-zinc-200">
                   {shiftInfo?.time}
                 </p>
               </div>
             </div>
 
-            <div className="p-8 rounded-3xl border border-zinc-200 dark:border-zinc-900 bg-white dark:bg-zinc-900/30 backdrop-blur-sm">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-6 flex items-center gap-2">
-                Closing Readings
-              </h3>
-              <div className="space-y-4">
+            <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-md shadow-xl">
+              <div className="flex items-center justify-between mb-8">
+                <h3 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+                  <Clock size={20} className="text-red-500" />
+                  Closing Readings
+                </h3>
+                <span className="text-xs text-zinc-500 bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800">
+                  {currentShift.readings.length} Nozzles Active
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {currentShift.readings.map((reading) => (
                   <div
                     key={reading.nozzleId}
-                    className="flex flex-col md:flex-row md:items-center gap-4 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50"
+                    className="group relative p-5 rounded-2xl border border-zinc-800 bg-zinc-950/50 hover:border-zinc-700 transition-all duration-300"
                   >
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                        {reading.nozzle.name}
-                      </p>
-                      <p className="text-xs text-zinc-500 uppercase mt-0.5">
-                        Opening:{" "}
-                        <span className="text-zinc-700 dark:text-zinc-300 font-mono">
-                          {reading.openingReading}
-                        </span>
-                      </p>
-                    </div>
-                    <div className="w-full md:w-48">
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Current Reading"
-                        className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-4 py-2 text-zinc-900 dark:text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-400 dark:placeholder:text-zinc-700"
-                        value={closingReadings[reading.nozzleId] || ""}
-                        onChange={(e) =>
-                          setClosingReadings({
-                            ...closingReadings,
-                            [reading.nozzleId]: Number(e.target.value),
-                          })
-                        }
-                        disabled={!isAdmin}
-                      />
-                      {!isAdmin && (
-                        <p className="text-xs text-zinc-500 mt-1">
-                          Current: {reading.nozzle.lastReading}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <p className="font-bold text-zinc-200">
+                          {reading.nozzle.name}
                         </p>
-                      )}
+                        <p className="text-xs text-zinc-500">
+                          {reading.nozzle.tank?.product?.name}
+                        </p>
+                      </div>
+                      <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
+                        <Fuel size={16} className="text-zinc-500" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-[10px] text-zinc-600 uppercase font-bold">
+                          Opening Reading
+                        </p>
+                        <p className="text-sm font-mono text-zinc-400">
+                          {reading.openingReading.toLocaleString()}
+                        </p>
+                      </div>
+
+                      <div className="relative">
+                        <label className="text-[10px] text-red-500 uppercase font-bold absolute -top-5 right-0 group-focus-within:opacity-100 opacity-0 transition-opacity">
+                          Current
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder="Enter Closing"
+                          className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-3 text-lg font-mono text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-700"
+                          value={closingReadings[reading.nozzleId] || ""}
+                          onChange={(e) =>
+                            setClosingReadings({
+                              ...closingReadings,
+                              [reading.nozzleId]: Number(e.target.value),
+                            })
+                          }
+                          disabled={!isAdmin}
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div className="mt-8 flex justify-end">
+              <div className="mt-10 pt-6 border-t border-zinc-800 flex justify-end">
                 <button
                   onClick={handleEndShift}
                   disabled={isSubmitting}
-                  className="px-8 py-3 rounded-xl bg-zinc-900 dark:bg-zinc-100 text-white dark:text-black font-bold hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all flex items-center gap-2 disabled:opacity-50"
+                  className="px-8 py-4 rounded-xl bg-zinc-100 text-black font-bold hover:bg-white hover:scale-105 transition-all flex items-center gap-3 disabled:opacity-50 shadow-[0_0_20px_rgba(255,255,255,0.1)]"
                 >
                   {isSubmitting ? (
                     <Loader2 className="animate-spin h-5 w-5" />
                   ) : (
                     <Square size={18} fill="currentColor" />
                   )}
-                  End Shift & Calculate Sales
+                  Close Shift & Report
                 </button>
               </div>
             </div>
@@ -320,5 +376,28 @@ export default function ShiftsPage() {
         )}
       </div>
     </DashboardLayout>
+  );
+}
+// Helper component for icon
+function Fuel({ size, className }: { size?: number; className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M3 22v-8a2 2 0 0 1 2-2h2.5" />
+      <path d="M12 22V10a2 2 0 0 0-2-2H2" />
+      <path d="M10 22h-5" />
+      <path d="M9 22h3" />
+      <path d="M14 22V2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v20l-3-3-3 3Z" />
+    </svg>
   );
 }

@@ -14,6 +14,9 @@ import { LoggerModule } from './logger/logger.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SeedModule } from './seed/seed.module';
 import { PaymentAccountsModule } from './payment-accounts/payment-accounts.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { ExpensesModule } from './expenses/expenses.module';
+import { CreditCustomersModule } from './credit-customers/credit-customers.module';
 
 @Module({
   imports: [
@@ -32,6 +35,9 @@ import { PaymentAccountsModule } from './payment-accounts/payment-accounts.modul
     PaymentAccountsModule,
     ScheduleModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true }),
+    SuppliersModule,
+    ExpensesModule,
+    CreditCustomersModule,
   ],
   controllers: [],
   providers: [],

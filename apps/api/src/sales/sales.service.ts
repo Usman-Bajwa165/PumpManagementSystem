@@ -58,20 +58,28 @@ export class SalesService {
         where: { id: nozzle.tankId },
         include: { product: true },
       });
-      
+
       if (updatedTank) {
-        const percentage = (Number(updatedTank.currentStock) / Number(updatedTank.capacity)) * 100;
+        const percentage =
+          (Number(updatedTank.currentStock) / Number(updatedTank.capacity)) *
+          100;
         const prefs = await this.prisma.notificationPreferences.findFirst();
-        
-        if (prefs && prefs.inventoryNotifications && percentage < prefs.lowFuelThreshold) {
-          this.whatsappService.notifyLowFuel(
-            prefs.phoneNumber,
-            updatedTank.name,
-            updatedTank.product.name,
-            Number(updatedTank.currentStock),
-            Number(updatedTank.capacity),
-            percentage,
-          ).catch(() => {});
+
+        if (
+          prefs &&
+          prefs.inventoryNotifications &&
+          percentage < prefs.lowFuelThreshold
+        ) {
+          this.whatsappService
+            .notifyLowFuel(
+              prefs.phoneNumber,
+              updatedTank.name,
+              updatedTank.product.name,
+              Number(updatedTank.currentStock),
+              Number(updatedTank.capacity),
+              percentage,
+            )
+            .catch(() => {});
         }
       }
 
@@ -86,17 +94,20 @@ export class SalesService {
 
       if (dto.paymentMethod === 'CASH') {
         debitAccountCode = '10101';
-      } else if (dto.paymentMethod === 'CARD' || dto.paymentMethod === 'ONLINE') {
+      } else if (
+        dto.paymentMethod === 'CARD' ||
+        dto.paymentMethod === 'ONLINE'
+      ) {
         debitAccountCode = '10201'; // Bank Account
       } else if (dto.paymentMethod === 'CREDIT') {
         debitAccountCode = '10301';
-        
+
         // Update or create credit customer
         if (dto.customerName) {
           let customer = await this.prisma.creditCustomer.findUnique({
             where: { name: dto.customerName },
           });
-          
+
           if (!customer) {
             customer = await this.prisma.creditCustomer.create({
               data: {
@@ -114,7 +125,7 @@ export class SalesService {
               },
             });
           }
-          
+
           // Create credit record with today's date
           await this.prisma.creditRecord.create({
             data: {
@@ -128,8 +139,20 @@ export class SalesService {
         throw new BadRequestException('Invalid payment method');
       }
 
+      // Check if customer exists based on name for credit or just for tracking
+      let customerId: string | undefined;
+      if (dto.customerName) {
+        const customer = await this.prisma.creditCustomer.findUnique({
+          where: { name: dto.customerName },
+        });
+        customerId = customer?.id;
+      }
+
       // Calculate profit: (sellingPrice - purchasePrice) * quantity
-      const profit = (Number(nozzle.tank.product.sellingPrice) - Number(nozzle.tank.product.purchasePrice)) * dto.quantity;
+      const profit =
+        (Number(nozzle.tank.product.sellingPrice) -
+          Number(nozzle.tank.product.purchasePrice)) *
+        dto.quantity;
 
       const tx = await this.accountingService.createTransaction({
         debitCode: debitAccountCode,
@@ -140,6 +163,12 @@ export class SalesService {
           dto.description ||
           `${nozzle.name} - ${dto.quantity}L ${nozzle.tank.product.name} - ${dto.paymentMethod}${dto.customerName ? ` - ${dto.customerName}` : ''}${dto.vehicleNumber ? ` (${dto.vehicleNumber})` : ''}${dto.paymentAccountId ? ` [Account: ${dto.paymentAccountId}]` : ''}`,
         shiftId: shift.id,
+        customerId,
+        createdById: userId,
+        paymentAccountId: dto.paymentAccountId,
+        nozzleId: dto.nozzleId,
+        productId: nozzle.tank.productId,
+        quantity: dto.quantity,
       });
 
       this.logger.logBusinessOperation(
@@ -154,11 +183,19 @@ export class SalesService {
         const prefs = await this.prisma.notificationPreferences.findFirst();
         if (prefs && prefs.salesNotifications) {
           // Check if this payment method notification is enabled
-          const shouldNotify = 
-            (dto.paymentMethod === 'CASH' && prefs.notifyCash && dto.amount >= Number(prefs.minCashAmount)) ||
-            (dto.paymentMethod === 'CARD' && prefs.notifyCard && dto.amount >= Number(prefs.minCardAmount)) ||
-            (dto.paymentMethod === 'ONLINE' && prefs.notifyOnline && dto.amount >= Number(prefs.minOnlineAmount)) ||
-            (dto.paymentMethod === 'CREDIT' && prefs.notifyCredit && dto.amount >= Number(prefs.minCreditAmount));
+          const shouldNotify =
+            (dto.paymentMethod === 'CASH' &&
+              prefs.notifyCash &&
+              dto.amount >= Number(prefs.minCashAmount)) ||
+            (dto.paymentMethod === 'CARD' &&
+              prefs.notifyCard &&
+              dto.amount >= Number(prefs.minCardAmount)) ||
+            (dto.paymentMethod === 'ONLINE' &&
+              prefs.notifyOnline &&
+              dto.amount >= Number(prefs.minOnlineAmount)) ||
+            (dto.paymentMethod === 'CREDIT' &&
+              prefs.notifyCredit &&
+              dto.amount >= Number(prefs.minCreditAmount));
 
           if (shouldNotify) {
             // Get account name if provided
@@ -201,24 +238,29 @@ export class SalesService {
   }
 
   async getCreditCustomers() {
-    return this.prisma.creditCustomer.findMany({
-      where: { totalCredit: { gt: 0 } },
-      orderBy: { name: 'asc' },
-      select: {
-        name: true,
-        vehicleNumber: true,
-        totalCredit: true,
-      },
-    }).then(customers => 
-      customers.map(c => ({
-        name: c.name,
-        vehicle: c.vehicleNumber,
-        amount: Number(c.totalCredit),
-      }))
-    );
+    return this.prisma.creditCustomer
+      .findMany({
+        where: { totalCredit: { gt: 0 } },
+        orderBy: { name: 'asc' },
+        select: {
+          name: true,
+          vehicleNumber: true,
+          totalCredit: true,
+        },
+      })
+      .then((customers) =>
+        customers.map((c) => ({
+          name: c.name,
+          vehicle: c.vehicleNumber,
+          amount: Number(c.totalCredit),
+        })),
+      );
   }
 
-  async clearCredit(userId: string, dto: { customerName: string; amount: number }) {
+  async clearCredit(
+    userId: string,
+    dto: { customerName: string; amount: number },
+  ) {
     try {
       const shift = await this.shiftsService.getCurrentShift();
       if (!shift) {
@@ -228,27 +270,35 @@ export class SalesService {
       // Update customer credit
       const customer = await this.prisma.creditCustomer.findUnique({
         where: { name: dto.customerName },
-        include: { creditRecords: { where: { remainingAmount: { gt: 0 } }, orderBy: { creditDate: 'asc' } } },
+        include: {
+          creditRecords: {
+            where: { remainingAmount: { gt: 0 } },
+            orderBy: { creditDate: 'asc' },
+          },
+        },
       });
 
       if (customer) {
         let remainingPayment = dto.amount;
-        
+
         // Pay off oldest credits first (FIFO)
         for (const record of customer.creditRecords) {
           if (remainingPayment <= 0) break;
-          
+
           const recordRemaining = Number(record.remainingAmount);
-          const paymentForThisRecord = Math.min(remainingPayment, recordRemaining);
-          
+          const paymentForThisRecord = Math.min(
+            remainingPayment,
+            recordRemaining,
+          );
+
           await this.prisma.creditRecord.update({
             where: { id: record.id },
             data: { remainingAmount: { decrement: paymentForThisRecord } },
           });
-          
+
           remainingPayment -= paymentForThisRecord;
         }
-        
+
         await this.prisma.creditCustomer.update({
           where: { name: dto.customerName },
           data: { totalCredit: { decrement: dto.amount } },

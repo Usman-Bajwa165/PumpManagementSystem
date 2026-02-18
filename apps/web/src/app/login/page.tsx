@@ -3,7 +3,14 @@
 import React, { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
-import { Fuel, Lock, User, AlertCircle } from "lucide-react";
+import {
+  Fuel,
+  Lock,
+  User,
+  AlertCircle,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
 import { useToast } from "@/components/Toast";
 
 export default function LoginPage() {
@@ -34,74 +41,89 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950 p-4 transition-all duration-500">
-      <div className="w-full max-w-md space-y-8 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 p-8 shadow-2xl backdrop-blur-xl">
-        <div className="text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-red-600/10 text-red-500 shadow-inner">
-            <Fuel size={32} />
-          </div>
-          <h2 className="mt-6 text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Pump Portal
-          </h2>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-            Sign in to manage your station
-          </p>
-        </div>
+    <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 relative overflow-hidden">
+      {/* Background Elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-red-600/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]" />
+      </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-4 rounded-md shadow-sm">
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 dark:text-zinc-500">
-                <User size={18} />
-              </div>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="block w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 py-3 pl-10 pr-3 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none transition-all focus:border-red-600 focus:ring-1 focus:ring-red-600 sm:text-sm"
-                placeholder="Username"
-              />
+      <div className="w-full max-w-md relative z-10 p-6 animate-in fade-in zoom-in duration-500">
+        <div className="rounded-3xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="p-8 pb-0 text-center">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-red-500 to-red-700 text-white shadow-lg shadow-red-900/50 mb-6 transform transition-transform hover:scale-110 duration-500">
+              <Fuel size={40} strokeWidth={1.5} />
             </div>
-            <div className="relative">
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400 dark:text-zinc-500">
-                <Lock size={18} />
-              </div>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950/50 py-3 pl-10 pr-3 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 outline-none transition-all focus:border-red-600 focus:ring-1 focus:ring-red-600 sm:text-sm"
-                placeholder="Password"
-              />
-            </div>
+            <h2 className="text-3xl font-bold tracking-tight text-white mb-2">
+              Pump Portal
+            </h2>
+            <p className="text-zinc-500 text-sm">
+              Secure access for station management
+            </p>
           </div>
 
-          {error && (
-            <div className="flex items-center gap-2 rounded-lg bg-red-600/10 p-3 text-sm text-red-500">
-              <AlertCircle size={16} />
-              <span>{error}</span>
+          <form className="p-8 space-y-6" onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                  <User size={20} />
+                </div>
+                <input
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-950/50 py-4 pl-12 pr-4 text-zinc-100 placeholder-zinc-600 outline-none transition-all focus:border-red-600 focus:bg-zinc-900 focus:ring-1 focus:ring-red-600"
+                  placeholder="Username"
+                />
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-500 group-focus-within:text-red-500 transition-colors">
+                  <Lock size={20} />
+                </div>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="block w-full rounded-xl border border-zinc-800 bg-zinc-950/50 py-4 pl-12 pr-4 text-zinc-100 placeholder-zinc-600 outline-none transition-all focus:border-red-600 focus:bg-zinc-900 focus:ring-1 focus:ring-red-600"
+                  placeholder="Password"
+                />
+              </div>
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="group relative flex w-full justify-center rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition-all hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-600 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-zinc-900 active:scale-[0.98] disabled:opacity-50"
-          >
-            {loading ? (
-              <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            ) : (
-              "Sign In"
+            {error && (
+              <div className="flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 p-4 text-sm text-red-500 animate-in slide-in-from-top-2">
+                <AlertCircle size={18} className="shrink-0" />
+                <span>{error}</span>
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="text-center">
-          <p className="text-xs text-zinc-500 dark:text-zinc-600">
-            Petrol Pump Management System &copy; 2024
-          </p>
+            <button
+              type="submit"
+              disabled={loading}
+              className="group relative flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-red-600 to-red-500 p-4 text-sm font-bold text-white transition-all hover:to-red-400 hover:shadow-lg hover:shadow-red-900/30 active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={20} />
+              ) : (
+                <>
+                  Sign In
+                  <ArrowRight
+                    size={18}
+                    className="transition-transform group-hover:translate-x-1"
+                  />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="bg-zinc-950/50 p-6 text-center border-t border-zinc-800/50">
+            <p className="text-xs text-zinc-600">
+              Protected by Enterprise Security &copy; 2026
+            </p>
+          </div>
         </div>
       </div>
     </div>

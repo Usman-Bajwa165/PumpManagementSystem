@@ -35,6 +35,7 @@ model User {
 
   openedShifts Shift[] @relation("ShiftOpener")
   closedShifts Shift[] @relation("ShiftCloser")
+  transactions Transaction[] @relation("TransactionCreator")
 }
 
 model Shift {
@@ -65,6 +66,7 @@ model Product {
   sellingPrice  Decimal  @db.Decimal(10, 2)
   purchasePrice Decimal  @db.Decimal(10, 2)
   tanks         Tank[]
+  transactions  Transaction[]
 }
 
 model Tank {
@@ -77,6 +79,7 @@ model Tank {
   
   nozzles     Nozzle[]
   dips        TankDip[] // Physical measurements
+  purchases   Purchase[]
 }
 
 model Nozzle {
@@ -87,6 +90,7 @@ model Nozzle {
   lastReading Decimal  @db.Decimal(15, 3) // Cumulative reading
   
   readings    NozzleReading[]
+  transactions Transaction[]
 }
 
 model NozzleReading {
@@ -129,6 +133,8 @@ model PaymentAccount {
   type        String   // CARD, ONLINE
   accountNumber String?
   createdAt   DateTime @default(now())
+  
+  transactions Transaction[]
 }
 
 model CreditCustomer {
@@ -140,6 +146,7 @@ model CreditCustomer {
   updatedAt     DateTime @updatedAt
   
   creditRecords CreditRecord[]
+  transactions  Transaction[]
 }
 
 model CreditRecord {
@@ -152,22 +159,7 @@ model CreditRecord {
   createdAt       DateTime @default(now())
 }
 
-model Transaction {
-  id              String   @id @default(uuid())
-  shiftId         String?
-  shift           Shift?   @relation(fields: [shiftId], references: [id])
-  
-  debitAccountId  String
-  debitAccount    Account  @relation("DebitAccount", fields: [debitAccountId], references: [id])
-  
-  creditAccountId String
-  creditAccount   Account  @relation("CreditAccount", fields: [creditAccountId], references: [id])
-  
-  amount          Decimal  @db.Decimal(15, 2)
-  profit          Decimal? @db.Decimal(15, 2) // Profit on sales
-  description     String?
-  createdAt       DateTime @default(now())
-}
+// Transaction moved to bottom with new relations
 
 model NotificationQueue {
   id        String   @id @default(uuid())
@@ -211,3 +203,92 @@ model NotificationPreferences {
   updatedAt DateTime @updatedAt
 }
 
+
+enum PaymentStatus {
+  PAID
+  UNPAID
+  PARTIAL
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  contact   String?
+  balance   Decimal  @default(0) @db.Decimal(15, 2) // Positive means we owe them (Liability)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  purchases     Purchase[]
+  transactions  Transaction[]
+}
+
+model Purchase {
+  id          String   @id @default(uuid())
+  supplierId  String
+  supplier    Supplier @relation(fields: [supplierId], references: [id])
+  tankId      String
+  tank        Tank     @relation(fields: [tankId], references: [id])
+  quantity    Decimal  @db.Decimal(10, 2)
+  rate        Decimal  @db.Decimal(10, 2) // Per liter cost
+  totalCost   Decimal  @db.Decimal(15, 2)
+  paidAmount  Decimal  @default(0) @db.Decimal(15, 2)
+  status      PaymentStatus @default(UNPAID)
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model ExpenseRecord {
+  id          String   @id @default(uuid())
+  title       String
+  amount      Decimal  @db.Decimal(15, 2)
+  category    String   // e.g. "Utilities", "Wages"
+  description String?
+  date        DateTime @default(now())
+  
+  // Link to the actual accounting transaction
+  transactionId String? @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+
+  createdBy   String?
+}
+
+// ... existing models ...
+
+model Transaction {
+  id              String   @id @default(uuid())
+  shiftId         String?
+  shift           Shift?   @relation(fields: [shiftId], references: [id])
+  
+  debitAccountId  String
+  debitAccount    Account  @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  
+  creditAccountId String
+  creditAccount   Account  @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
+
+  customerId      String?
+  customer        CreditCustomer? @relation(fields: [customerId], references: [id])
+
+  expenseRecord   ExpenseRecord?
+
+  createdById     String?
+  createdBy       User?    @relation("TransactionCreator", fields: [createdById], references: [id])
+
+  paymentAccountId String?
+  paymentAccount   PaymentAccount? @relation(fields: [paymentAccountId], references: [id])
+
+  nozzleId        String?
+  nozzle          Nozzle?  @relation(fields: [nozzleId], references: [id])
+
+  productId       String?
+  product         Product? @relation(fields: [productId], references: [id])
+
+  quantity        Decimal? @db.Decimal(10, 2)
+  amount          Decimal  @db.Decimal(15, 2)
+  profit          Decimal? @db.Decimal(15, 2) // Profit on sales
+  description     String?
+  createdAt       DateTime @default(now())
+}

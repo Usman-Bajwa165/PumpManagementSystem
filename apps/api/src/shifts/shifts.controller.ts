@@ -47,4 +47,8 @@ export class ShiftsController {
   ) {
     return this.shiftsService.closeShift(req.user.sub, body.readings);
   }
+  @Get()
+  async findAll() {
+    return this.shiftsService.findAll();
+  }
 }
