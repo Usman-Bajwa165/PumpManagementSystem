@@ -25,8 +25,18 @@ interface Supplier {
   balance: number;
 }
 
+interface CreditCustomer {
+  name: string;
+  vehicle: string;
+  amount: number;
+}
+
 export default function SuppliersPage() {
+  const [activeTab, setActiveTab] = useState<"suppliers" | "credit">(
+    "suppliers",
+  );
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -40,6 +50,11 @@ export default function SuppliersPage() {
     null,
   );
   const [payAmount, setPayAmount] = useState("");
+
+  const [selectedCreditCustomer, setSelectedCreditCustomer] =
+    useState<CreditCustomer | null>(null);
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearAmount, setClearAmount] = useState("");
 
   const { user } = useAuth();
   const router = useRouter();
@@ -56,9 +71,25 @@ export default function SuppliersPage() {
     }
   };
 
+  const fetchCreditCustomers = async () => {
+    try {
+      setIsLoading(true);
+      const res = await api.get("/sales/credit-customers");
+      setCreditCustomers(res.data);
+    } catch (err) {
+      console.error("Failed to fetch credit customers", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchSuppliers();
-  }, []);
+    if (activeTab === "suppliers") {
+      fetchSuppliers();
+    } else {
+      fetchCreditCustomers();
+    }
+  }, [activeTab]);
 
   const handleAddSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,8 +128,34 @@ export default function SuppliersPage() {
     }
   };
 
+  const handleClearCredit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCreditCustomer) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await api.post("/sales/clear-credit", {
+        customerName: selectedCreditCustomer.name,
+        amount: Number(clearAmount),
+      });
+      setShowClearModal(false);
+      setClearAmount("");
+      fetchCreditCustomers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to clear credit");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const filteredSuppliers = suppliers.filter((s) =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  );
+
+  const filteredCreditCustomers = creditCustomers.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.vehicle?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -116,7 +173,7 @@ export default function SuppliersPage() {
             </p>
           </div>
 
-          {!isReadOnly && (
+          {!isReadOnly && activeTab === "suppliers" && (
             <button
               onClick={() => setShowAddModal(true)}
               className="px-5 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20"
@@ -127,12 +184,42 @@ export default function SuppliersPage() {
           )}
         </div>
 
+        {/* Tabs */}
+        <div className="flex p-1 bg-zinc-900/50 rounded-2xl border border-zinc-800 w-full sm:w-fit">
+          <button
+            onClick={() => setActiveTab("suppliers")}
+            className={cn(
+              "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+              activeTab === "suppliers"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+                : "text-zinc-500 hover:text-zinc-300",
+            )}
+          >
+            Suppliers
+          </button>
+          <button
+            onClick={() => setActiveTab("credit")}
+            className={cn(
+              "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+              activeTab === "credit"
+                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/20"
+                : "text-zinc-500 hover:text-zinc-300",
+            )}
+          >
+            Credit Customers
+          </button>
+        </div>
+
         {/* Search & Stats */}
         <div className="flex items-center gap-4 bg-zinc-900/50 p-2 rounded-2xl border border-zinc-800">
           <Search className="text-zinc-500 ml-3" size={20} />
           <input
             type="text"
-            placeholder="Search suppliers..."
+            placeholder={
+              activeTab === "suppliers"
+                ? "Search suppliers..."
+                : "Search credit customers (name or vehicle)..."
+            }
             className="bg-transparent border-none outline-none text-zinc-200 w-full placeholder:text-zinc-600"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -144,67 +231,144 @@ export default function SuppliersPage() {
           <div className="flex h-64 items-center justify-center">
             <Loader2 className="animate-spin text-blue-600 w-8 h-8" />
           </div>
-        ) : filteredSuppliers.length === 0 ? (
+        ) : activeTab === "suppliers" ? (
+          filteredSuppliers.length === 0 ? (
+            <div className="text-center py-20 text-zinc-500 bg-zinc-900/20 rounded-3xl border border-dashed border-zinc-800">
+              <Users size={48} className="mx-auto mb-4 opacity-50" />
+              <p>No suppliers found.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredSuppliers.map((supplier) => (
+                <div
+                  key={supplier.id}
+                  className="group p-6 rounded-3xl border border-zinc-800 bg-zinc-950 hover:border-zinc-700 transition-all hover:bg-zinc-900/50 relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                  <div className="relative z-10">
+                    <div className="flex justify-between items-start mb-6">
+                      <div className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-zinc-400 group-hover:text-blue-400 transition-colors">
+                        <Users size={24} />
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
+                          Payable Balance
+                        </p>
+                        <p
+                          className={cn(
+                            "text-xl font-bold font-mono",
+                            supplier.balance > 0
+                              ? "text-red-500"
+                              : "text-emerald-500",
+                          )}
+                        >
+                          Rs. {Number(supplier.balance).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <h3 className="text-xl font-bold text-zinc-100 mb-1">
+                      {supplier.name}
+                    </h3>
+
+                    <div className="flex items-center gap-2 text-zinc-500 text-sm mb-6">
+                      <Phone size={14} />
+                      {supplier.contact || "No contact info"}
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedSupplier(supplier);
+                          setPayAmount(supplier.balance.toString());
+                          setShowPayModal(true);
+                        }}
+                        className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
+                      >
+                        <Wallet size={14} />
+                        Pay
+                      </button>
+                      <button
+                        onClick={() =>
+                          router.push(
+                            `/reports?reportType=LEDGER&ledgerType=SUPPLIER&entityId=${supplier.id}`,
+                          )
+                        }
+                        className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
+                      >
+                        <ArrowUpRight size={14} />
+                        Ledger
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : filteredCreditCustomers.length === 0 ? (
           <div className="text-center py-20 text-zinc-500 bg-zinc-900/20 rounded-3xl border border-dashed border-zinc-800">
             <Users size={48} className="mx-auto mb-4 opacity-50" />
-            <p>No suppliers found.</p>
+            <p>No credit customers found.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredSuppliers.map((supplier) => (
+            {filteredCreditCustomers.map((customer) => (
               <div
-                key={supplier.id}
+                key={customer.name}
                 className="group p-6 rounded-3xl border border-zinc-800 bg-zinc-950 hover:border-zinc-700 transition-all hover:bg-zinc-900/50 relative overflow-hidden"
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-6">
-                    <div className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-zinc-400 group-hover:text-blue-400 transition-colors">
+                    <div className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-zinc-400 group-hover:text-indigo-400 transition-colors">
                       <Users size={24} />
                     </div>
                     <div className="text-right">
                       <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                        Payable Balance
+                        Credit Balance
                       </p>
                       <p
                         className={cn(
                           "text-xl font-bold font-mono",
-                          supplier.balance > 0
-                            ? "text-red-500"
+                          customer.amount > 0
+                            ? "text-orange-500"
                             : "text-emerald-500",
                         )}
                       >
-                        Rs. {Number(supplier.balance).toLocaleString()}
+                        Rs. {Number(customer.amount).toLocaleString()}
                       </p>
                     </div>
                   </div>
 
                   <h3 className="text-xl font-bold text-zinc-100 mb-1">
-                    {supplier.name}
+                    {customer.name}
                   </h3>
 
                   <div className="flex items-center gap-2 text-zinc-500 text-sm mb-6">
-                    <Phone size={14} />
-                    {supplier.contact || "No contact info"}
+                    <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 uppercase text-[10px] font-bold">
+                      Vehicle
+                    </span>
+                    {customer.vehicle || "N/A"}
                   </div>
 
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
-                        setSelectedSupplier(supplier);
-                        setPayAmount(supplier.balance.toString());
-                        setShowPayModal(true);
+                        setSelectedCreditCustomer(customer);
+                        setClearAmount(customer.amount.toString());
+                        setShowClearModal(true);
                       }}
                       className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
                     >
                       <Wallet size={14} />
-                      Pay
+                      Clear Record
                     </button>
                     <button
                       onClick={() =>
                         router.push(
-                          `/reports?reportType=LEDGER&ledgerType=SUPPLIER&entityId=${supplier.id}`,
+                          `/reports?reportType=LEDGER&ledgerType=CUSTOMER&entityName=${encodeURIComponent(customer.name)}`,
                         )
                       }
                       className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
@@ -343,6 +507,78 @@ export default function SuppliersPage() {
                       <Loader2 className="animate-spin mx-auto" />
                     ) : (
                       "Confirm Payment"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Clear Credit Modal */}
+        {showClearModal && selectedCreditCustomer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 shadow-2xl relative">
+              <h2 className="text-2xl font-bold text-zinc-100 mb-2">
+                Clear Credit Record
+              </h2>
+              <p className="text-zinc-500 text-sm mb-6">
+                Processing payment for{" "}
+                <span className="text-zinc-200 font-bold">
+                  {selectedCreditCustomer.name}
+                </span>
+              </p>
+
+              <form onSubmit={handleClearCredit} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase flex justify-between">
+                    Amount
+                    <span className="text-orange-500 lowercase">
+                      Credit: Rs.{" "}
+                      {Number(selectedCreditCustomer.amount).toLocaleString()}
+                    </span>
+                  </label>
+                  <input
+                    required
+                    type="number"
+                    step="0.01"
+                    value={clearAmount}
+                    onChange={(e) => setClearAmount(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-indigo-600 font-mono text-lg"
+                    placeholder="Enter amount"
+                  />
+                </div>
+
+                {(parseFloat(clearAmount) || 0) >
+                  Number(selectedCreditCustomer.amount) && (
+                  <p className="text-red-500 text-xs font-bold animate-pulse">
+                    Error: Amount cannot exceed total credit balance.
+                  </p>
+                )}
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowClearModal(false)}
+                    className="flex-1 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:bg-zinc-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      (parseFloat(clearAmount) || 0) >
+                        Number(selectedCreditCustomer.amount) ||
+                      (parseFloat(clearAmount) || 0) <= 0
+                    }
+                    className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="animate-spin mx-auto" />
+                    ) : (
+                      "Clear Record"
                     )}
                   </button>
                 </div>

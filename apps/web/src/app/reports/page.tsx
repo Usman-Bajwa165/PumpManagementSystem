@@ -21,7 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 type ReportType = "PL" | "BS" | "SALES" | "PURCHASE" | "LEDGER" | "TRIAL";
 type SalesViewMode =
@@ -41,6 +41,37 @@ export default function ReportsPage() {
       .split("T")[0],
     end: new Date().toISOString().split("T")[0],
   });
+
+  const formatDate = (date: any) => {
+    if (!date) return "---";
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(date));
+  };
+
+  const formatTime = (date: any) => {
+    if (!date) return "---";
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(date));
+  };
+
+  const formatDateTime = (date: any) => {
+    if (!date) return "---";
+    return `${formatDate(date)} ${formatTime(date)}`;
+  };
+
+  const formatShiftName = (shift: any) => {
+    if (!shift || !shift.startTime) return "Unknown";
+    const date = new Date(shift.startTime);
+    const hours = date.getHours();
+    const period = hours < 12 ? "M" : "N";
+    return `${formatDate(date)} ${period}`;
+  };
 
   // Sales Specific States
   const [salesViewMode, setSalesViewMode] =
@@ -62,6 +93,7 @@ export default function ReportsPage() {
   const [selectedEntityId, setSelectedEntityId] = useState("");
 
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     const type = searchParams.get("reportType") as ReportType;
@@ -71,6 +103,11 @@ export default function ReportsPage() {
     if (type) setReportType(type);
     if (entityId) setSelectedEntityId(entityId);
     if (lType) setLedgerType(lType);
+
+    // Trigger fetch if all params are present
+    if (type && entityId && lType) {
+      setTimeout(() => fetchReport(), 100);
+    }
   }, [searchParams]);
 
   // Metadata for filters
@@ -153,6 +190,7 @@ export default function ReportsPage() {
       }
 
       const res = await api.get(endpoint, { params });
+      console.log("Report data:", res.data);
       setData(res.data);
     } catch (err) {
       console.error("Failed to fetch report:", err);
@@ -389,13 +427,21 @@ export default function ReportsPage() {
                 <button
                   key={q.label}
                   onClick={() => {
-                    const end = new Date().toISOString().split("T")[0];
-                    const start = new Date(
-                      new Date().setDate(new Date().getDate() - q.days),
-                    )
-                      .toISOString()
-                      .split("T")[0];
-                    setDateRange({ start, end });
+                    const now = new Date();
+                    if (q.days === 0) {
+                      const today = now.toISOString().split("T")[0];
+                      setDateRange({ start: today, end: today });
+                    } else {
+                      const end = now.toISOString().split("T")[0];
+                      const start = new Date(
+                        now.getFullYear(),
+                        now.getMonth(),
+                        now.getDate() - q.days,
+                      )
+                        .toISOString()
+                        .split("T")[0];
+                      setDateRange({ start, end });
+                    }
                   }}
                   className="px-3 py-1.5 rounded-xl border border-zinc-800 text-[10px] font-bold text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-all"
                 >
@@ -423,56 +469,63 @@ export default function ReportsPage() {
                   <option value="DETAILED_SALES">Detailed Sales</option>
                 </select>
 
-                <select
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all min-w-[150px]"
-                  value={selectedShiftId}
-                  onChange={(e) => setSelectedShiftId(e.target.value)}
-                >
-                  <option value="">All Shifts</option>
-                  {shifts.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.opener?.username} (
-                      {new Date(s.startTime).toLocaleDateString()})
-                    </option>
-                  ))}
-                </select>
+                {/* Show shift filter for all except DAILY_SUMMARY */}
+                {salesViewMode !== "DAILY_SUMMARY" && (
+                  <select
+                    className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all min-w-[200px]"
+                    value={selectedShiftId}
+                    onChange={(e) => setSelectedShiftId(e.target.value)}
+                  >
+                    <option value="">All Shifts</option>
+                    {shifts.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {formatShiftName(s)} ({s.opener?.username || "Admin"})
+                      </option>
+                    ))}
+                  </select>
+                )}
 
-                <select
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
-                  value={selectedNozzleId}
-                  onChange={(e) => setSelectedNozzleId(e.target.value)}
-                >
-                  <option value="">All Nozzles</option>
-                  {nozzles.map((n) => (
-                    <option key={n.id} value={n.id}>
-                      {n.name}
-                    </option>
-                  ))}
-                </select>
+                {/* Show nozzle/product/payment filters only for DETAILED_SALES */}
+                {salesViewMode === "DETAILED_SALES" && (
+                  <>
+                    <select
+                      className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
+                      value={selectedNozzleId}
+                      onChange={(e) => setSelectedNozzleId(e.target.value)}
+                    >
+                      <option value="">All Nozzles</option>
+                      {nozzles.map((n) => (
+                        <option key={n.id} value={n.id}>
+                          {n.name}
+                        </option>
+                      ))}
+                    </select>
 
-                <select
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                >
-                  <option value="">All Products</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                    <select
+                      className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
+                      value={selectedProductId}
+                      onChange={(e) => setSelectedProductId(e.target.value)}
+                    >
+                      <option value="">All Products</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
 
-                <select
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
-                  value={selectedPaymentType}
-                  onChange={(e) => setSelectedPaymentType(e.target.value)}
-                >
-                  <option value="ALL">All Payments</option>
-                  <option value="CASH">Cash</option>
-                  <option value="CREDIT">Credit</option>
-                  <option value="BANK">Bank / POS</option>
-                </select>
+                    <select
+                      className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
+                      value={selectedPaymentType}
+                      onChange={(e) => setSelectedPaymentType(e.target.value)}
+                    >
+                      <option value="ALL">All Payments</option>
+                      <option value="CASH">Cash</option>
+                      <option value="CREDIT">Credit</option>
+                      <option value="BANK">Bank / POS</option>
+                    </select>
+                  </>
+                )}
               </div>
             )}
 
@@ -539,7 +592,7 @@ export default function ReportsPage() {
                   onChange={(e) => setSelectedEntityId(e.target.value)}
                 >
                   <option value="">Select Account...</option>
-                  <option value="ALL"> [ VIEW ALL ] </option>
+                  <option value="ALL"> [ ALL ] </option>
                   {(ledgerType === "SUPPLIER" ? suppliers : customers).map(
                     (e: any) => (
                       <option key={e.id} value={e.id}>
@@ -582,6 +635,31 @@ export default function ReportsPage() {
             {/* Profit & Loss */}
             {reportType === "PL" && (
               <div className="space-y-6">
+                {/* Explanation Card */}
+                <div className="p-6 rounded-3xl bg-zinc-900/20 border border-zinc-800">
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    <span className="font-black text-zinc-400">
+                      How it works:
+                    </span>{" "}
+                    Profit & Loss shows your business performance.
+                    <span className="text-emerald-400 font-bold">
+                      {" "}
+                      Income
+                    </span>{" "}
+                    (revenue from sales) minus
+                    <span className="text-rose-400 font-bold">
+                      {" "}
+                      Expenses
+                    </span>{" "}
+                    (costs like fuel purchases, salaries) equals
+                    <span className="text-zinc-100 font-bold">
+                      {" "}
+                      Net Profit
+                    </span>{" "}
+                    (or Loss if negative).
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-8 rounded-[32px] bg-emerald-500/10 border border-emerald-500/20 card-hover">
                     <div className="flex justify-between items-start mb-4">
@@ -650,52 +728,53 @@ export default function ReportsPage() {
             {/* Sales Report */}
             {reportType === "SALES" && (
               <div className="space-y-6">
-                {/* Summary Section */}
-                {data.summary && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="p-5 rounded-3xl bg-zinc-900/40 border border-zinc-800">
-                      <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">
-                        Total Customers
+                {/* Dynamic Summary Cards */}
+                {data?.summary && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">
+                        Total Transactions
                       </p>
-                      <p className="text-2xl font-black text-zinc-100">
-                        {data.summary.totalCustomers}
+                      <p className="text-2xl font-black text-zinc-100 font-mono">
+                        {data.summary.totalCustomers || 0}
                       </p>
                     </div>
-                    {data.summary.paymentMethodTotals.map((pm: any) => (
-                      <div
-                        key={pm.method}
-                        className="p-5 rounded-3xl bg-zinc-900/40 border border-zinc-800"
-                      >
-                        <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-1">
-                          {pm.method} Sales
-                        </p>
-                        <p className="text-2xl font-black text-zinc-100">
-                          Rs. {(pm.amount || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
-                {data.summary?.fuelTypeTotals && (
-                  <div className="flex flex-wrap gap-4">
-                    {data.summary.fuelTypeTotals.map((ft: any) => (
-                      <div
-                        key={ft.name}
-                        className="px-5 py-3 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex items-center gap-4"
-                      >
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                        <div>
-                          <p className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">
-                            {ft.name}
+                    {data.summary.fuelTypeTotals?.length > 0 &&
+                      data.summary.fuelTypeTotals.map((fuel: any) => (
+                        <div
+                          key={fuel.name}
+                          className="p-5 rounded-2xl bg-blue-500/10 border border-blue-500/20"
+                        >
+                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-400 mb-1">
+                            {fuel.name}
                           </p>
-                          <p className="text-sm font-bold text-zinc-200">
-                            {(ft.quantity || 0).toFixed(2)} L | Rs.{" "}
-                            {(ft.amount || 0).toLocaleString()}
+                          <p className="text-xl font-black text-blue-300 font-mono">
+                            {fuel.quantity.toFixed(0)} L
+                          </p>
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            Rs. {fuel.amount.toLocaleString()}
                           </p>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+
+                    {data.summary.paymentMethodTotals?.length > 0 &&
+                      data.summary.paymentMethodTotals.map((pm: any) => (
+                        <div
+                          key={pm.method}
+                          className="p-5 rounded-2xl bg-zinc-900/40 border border-zinc-800"
+                        >
+                          <p className="text-[9px] font-black uppercase tracking-widest text-zinc-600 mb-1">
+                            {pm.method} Sales
+                          </p>
+                          <p className="text-xl font-black text-emerald-400 font-mono">
+                            Rs. {pm.amount.toLocaleString()}
+                          </p>
+                          <p className="text-[10px] text-zinc-500 mt-1">
+                            {pm.count} transactions
+                          </p>
+                        </div>
+                      ))}
                   </div>
                 )}
 
@@ -707,269 +786,297 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                  <table className="w-full text-left text-sm text-zinc-400 border-collapse">
-                    <thead className="bg-zinc-900/80 uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
-                      {salesViewMode === "DAILY_SUMMARY" && (
-                        <tr>
-                          <th className="px-6 py-5">Date</th>
-                          <th className="px-6 py-5 text-right">Qty Sold</th>
-                          <th className="px-6 py-5 text-right">Cash</th>
-                          <th className="px-6 py-5 text-right">Credit</th>
-                          <th className="px-6 py-5 text-right">Total Sale</th>
-                          <th className="px-6 py-5 text-right text-emerald-500">
-                            Profit
-                          </th>
-                        </tr>
-                      )}
-                      {salesViewMode === "SHIFT_WISE" && (
-                        <tr>
-                          <th className="px-6 py-5">Shift / Operator</th>
-                          <th className="px-6 py-5">Time Range</th>
-                          <th className="px-6 py-5 text-right">Total Sales</th>
-                          <th className="px-6 py-5 text-right">Qty</th>
-                          <th className="px-6 py-5 text-right text-emerald-500">
-                            Profit
-                          </th>
-                        </tr>
-                      )}
-                      {salesViewMode === "NOZZLE_WISE" && (
-                        <tr>
-                          <th className="px-6 py-5">Nozzle</th>
-                          <th className="px-6 py-5 text-right">Opening</th>
-                          <th className="px-6 py-5 text-right">Closing</th>
-                          <th className="px-6 py-5 text-right">Sold (L)</th>
-                          <th className="px-6 py-5 text-right">Rate</th>
-                          <th className="px-6 py-5 text-right text-zinc-100">
-                            Total
-                          </th>
-                        </tr>
-                      )}
-                      {salesViewMode === "NOZZLE_READINGS" && (
-                        <tr>
-                          <th className="px-6 py-5">Date / Shift</th>
-                          <th className="px-6 py-5">Nozzle</th>
-                          <th className="px-6 py-5 text-right">Opening</th>
-                          <th className="px-6 py-5 text-right">Closing</th>
-                          <th className="px-6 py-5 text-right">Sold (L)</th>
-                          <th className="px-6 py-5 text-right">Rate</th>
-                          <th className="px-6 py-5 text-right text-zinc-100">
-                            Amount
-                          </th>
-                        </tr>
-                      )}
-                      {salesViewMode === "DETAILED_SALES" && (
-                        <tr>
-                          <th className="px-6 py-5">Date / Time</th>
-                          <th className="px-6 py-5">Customer / Vehicle</th>
-                          <th className="px-6 py-5">Fuel / Nozzle</th>
-                          <th className="px-6 py-5 text-right">Quantity</th>
-                          <th className="px-6 py-5 text-right">Amount</th>
-                          <th className="px-6 py-5">Method</th>
-                          <th className="px-6 py-5">Paid To</th>
-                          <th className="px-6 py-5">Shift</th>
-                        </tr>
-                      )}
-                    </thead>
-                    <tbody className="divide-y divide-zinc-900">
-                      {(Array.isArray(data) ? data : data.records || []).map(
-                        (row: any, i: number) => (
-                          <tr
-                            key={i}
-                            className="group hover:bg-zinc-100/[0.02] transition-colors"
-                          >
-                            {salesViewMode === "DAILY_SUMMARY" && (
-                              <>
-                                <td className="px-6 py-5 font-mono text-zinc-300 font-bold">
-                                  {new Date(row.date).toLocaleDateString()}
-                                </td>
-                                <td className="px-6 py-5 text-right text-zinc-400">
-                                  {(row.quantitySold || 0).toFixed(2)} L
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-500">
-                                  {(row.cashSales || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-500">
-                                  {(row.creditSales || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono italic">
-                                  Rs. {(row.totalSales || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-black text-emerald-500 font-mono">
-                                  Rs. {(row.profit || 0).toLocaleString()}
-                                </td>
-                              </>
-                            )}
-                            {salesViewMode === "SHIFT_WISE" && (
-                              <>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.operator}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 font-mono uppercase truncate max-w-[100px]">
-                                      {row.id}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5 text-xs text-zinc-500">
-                                  {new Date(row.startTime).toLocaleTimeString(
-                                    [],
-                                    { hour: "2-digit", minute: "2-digit" },
-                                  )}{" "}
-                                  -
-                                  {row.endTime
-                                    ? new Date(row.endTime).toLocaleTimeString(
-                                        [],
-                                        { hour: "2-digit", minute: "2-digit" },
-                                      )
-                                    : "Ongoing"}
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono">
-                                  Rs. {(row.totalSales || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right text-zinc-500">
-                                  {(row.quantitySold || 0).toFixed(2)} L
-                                </td>
-                                <td className="px-6 py-5 text-right font-black text-emerald-500 font-mono">
-                                  Rs. {row.profit.toLocaleString()}
-                                </td>
-                              </>
-                            )}
-                            {salesViewMode === "NOZZLE_WISE" && (
-                              <>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.nozzle}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 uppercase">
-                                      {row.product}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-500">
-                                  {(row.openingReading || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-500">
-                                  {(row.closingReading || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-100">
-                                  {(row.sale || 0).toFixed(2)} L
-                                </td>
-                                <td className="px-6 py-5 text-right text-zinc-500 font-mono">
-                                  {row.rate}
-                                </td>
-                                <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                                  Rs. {(row.totalSale || 0).toLocaleString()}
-                                </td>
-                              </>
-                            )}
-                            {salesViewMode === "NOZZLE_READINGS" && (
-                              <>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-mono text-xs font-bold">
-                                      {new Date(row.date).toLocaleDateString()}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 truncate max-w-[80px]">
-                                      {row.shiftId}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.nozzle}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 uppercase">
-                                      {row.product}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-600">
-                                  {(row.openingReading || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-mono text-zinc-600">
-                                  {(row.closingReading || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-200 font-mono">
-                                  {(row.sold || 0).toFixed(2)} L
-                                </td>
-                                <td className="px-6 py-5 text-right text-zinc-500 font-mono">
-                                  {row.rate}
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono italic">
-                                  Rs. {(row.amount || 0).toLocaleString()}
-                                </td>
-                              </>
-                            )}
-                            {salesViewMode === "DETAILED_SALES" && (
-                              <>
-                                <td className="px-6 py-5 font-mono text-xs">
-                                  {new Date(row.date).toLocaleString([], {
-                                    dateStyle: "short",
-                                    timeStyle: "short",
-                                  })}
-                                </td>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.name}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 uppercase">
-                                      {row.vehicleNo}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5">
-                                  <div className="flex flex-col">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.fuel}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 uppercase">
-                                      {row.nozzle}
-                                    </span>
-                                  </div>
-                                </td>
-                                <td className="px-6 py-5 text-right font-bold text-zinc-200">
-                                  {(row.quantity || 0).toFixed(2)} L
-                                </td>
-                                <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                                  Rs. {(row.amount || 0).toLocaleString()}
-                                </td>
-                                <td className="px-6 py-5">
-                                  <span
-                                    className={cn(
-                                      "px-2 py-0.5 rounded text-[9px] font-black uppercase",
-                                      row.method === "CASH"
-                                        ? "bg-emerald-500/10 text-emerald-500"
-                                        : row.method === "CREDIT"
-                                          ? "bg-rose-500/10 text-rose-500"
-                                          : "bg-blue-500/10 text-blue-500",
-                                    )}
-                                  >
-                                    {row.method}
-                                  </span>
-                                </td>
-                                <td className="px-6 py-5 text-xs text-zinc-400">
-                                  {row.paidTo}
-                                </td>
-                                <td className="px-6 py-5 text-xs text-zinc-500">
-                                  {row.shift}
-                                </td>
-                              </>
-                            )}
+                  <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                    <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                      <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                        {salesViewMode === "DAILY_SUMMARY" && (
+                          <tr>
+                            <th className="px-6 py-5">Date</th>
+                            <th className="px-6 py-5 text-right">Qty Sold</th>
+                            <th className="px-6 py-5 text-right">Cash</th>
+                            <th className="px-6 py-5 text-right">Credit</th>
+                            <th className="px-6 py-5 text-right">Total Sale</th>
+                            <th className="px-6 py-5 text-right text-emerald-500">
+                              Profit
+                            </th>
                           </tr>
-                        ),
-                      )}
-                    </tbody>
-                  </table>
-                  {(Array.isArray(data) ? data : data.records || []).length ===
-                    0 && (
-                    <div className="py-20 text-center text-zinc-600">
-                      No sales data found for selected filters
-                    </div>
-                  )}
+                        )}
+                        {salesViewMode === "SHIFT_WISE" && (
+                          <tr>
+                            <th className="px-6 py-5">Shift / Operator</th>
+                            <th className="px-6 py-5">Time Range</th>
+                            <th className="px-6 py-5 text-right">
+                              Total Sales
+                            </th>
+                            <th className="px-6 py-5 text-right">Qty</th>
+                            <th className="px-6 py-5 text-right text-emerald-500">
+                              Profit
+                            </th>
+                          </tr>
+                        )}
+                        {salesViewMode === "NOZZLE_WISE" && (
+                          <tr>
+                            <th className="px-6 py-5">Nozzle / Shift</th>
+                            <th className="px-6 py-5 text-right">Opening</th>
+                            <th className="px-6 py-5 text-right">Closing</th>
+                            <th className="px-6 py-5 text-right">Sold (L)</th>
+                            <th className="px-6 py-5 text-right">Rate</th>
+                            <th className="px-6 py-5 text-right text-zinc-100">
+                              Total
+                            </th>
+                          </tr>
+                        )}
+                        {salesViewMode === "NOZZLE_READINGS" && (
+                          <tr>
+                            <th className="px-6 py-5">Date / Shift</th>
+                            <th className="px-6 py-5">Nozzle</th>
+                            <th className="px-6 py-5 text-right">Opening</th>
+                            <th className="px-6 py-5 text-right">Closing</th>
+                            <th className="px-6 py-5 text-right">Sold (L)</th>
+                            <th className="px-6 py-5 text-right">Rate</th>
+                            <th className="px-6 py-5 text-right text-zinc-100">
+                              Amount
+                            </th>
+                          </tr>
+                        )}
+                        {salesViewMode === "DETAILED_SALES" && (
+                          <tr>
+                            <th className="px-6 py-5">Date / Time</th>
+                            <th className="px-6 py-5">Customer / Vehicle</th>
+                            <th className="px-6 py-5">Fuel / Nozzle</th>
+                            <th className="px-6 py-5 text-right">Quantity</th>
+                            <th className="px-6 py-5 text-right">Amount</th>
+                            <th className="px-6 py-5">Method</th>
+                            <th className="px-6 py-5">Paid To</th>
+                            <th className="px-6 py-5">Shift</th>
+                          </tr>
+                        )}
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900">
+                        {(Array.isArray(data) ? data : data.records || []).map(
+                          (row: any, i: number) => (
+                            <tr
+                              key={i}
+                              className="group hover:bg-zinc-100/[0.02] transition-colors"
+                            >
+                              {salesViewMode === "DAILY_SUMMARY" && (
+                                <>
+                                  <td className="px-6 py-5 font-mono text-zinc-300 font-bold">
+                                    {formatDate(row.date)}
+                                  </td>
+                                  <td className="px-6 py-5 text-right text-zinc-400">
+                                    {(row.quantitySold || 0).toFixed(2)} L
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.cashSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.creditSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono italic">
+                                    Rs. {(row.totalSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-black text-emerald-500 font-mono">
+                                    Rs. {(row.profit || 0).toLocaleString()}
+                                  </td>
+                                </>
+                              )}
+                              {salesViewMode === "SHIFT_WISE" && (
+                                <>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.shiftName ||
+                                          formatShiftName({
+                                            startTime: row.startTime,
+                                          })}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500">
+                                        by {row.operator}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5 text-xs text-zinc-500">
+                                    {new Date(row.startTime).toLocaleTimeString(
+                                      [],
+                                      { hour: "2-digit", minute: "2-digit" },
+                                    )}{" "}
+                                    -
+                                    {row.endTime
+                                      ? new Date(
+                                          row.endTime,
+                                        ).toLocaleTimeString([], {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })
+                                      : "Ongoing"}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono">
+                                    Rs. {(row.totalSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right text-zinc-500">
+                                    {(row.quantitySold || 0).toFixed(2)} L
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-black text-emerald-500 font-mono">
+                                    Rs. {(row.profit || 0).toLocaleString()}
+                                  </td>
+                                </>
+                              )}
+                              {salesViewMode === "NOZZLE_WISE" && (
+                                <>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.nozzle}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 uppercase">
+                                        {row.product}
+                                      </span>
+                                      <span className="text-[9px] text-zinc-600 mt-0.5">
+                                        {row.shiftName || "Multiple Shifts"}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.openingReading || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.closingReading || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-100">
+                                    {(row.sale || 0).toFixed(2)} L
+                                  </td>
+                                  <td className="px-6 py-5 text-right text-zinc-500 font-mono">
+                                    {row.rate}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                                    Rs. {(row.totalSale || 0).toLocaleString()}
+                                  </td>
+                                </>
+                              )}
+                              {salesViewMode === "NOZZLE_READINGS" && (
+                                <>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-mono text-xs font-bold">
+                                        {formatDate(row.date)}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500">
+                                        {row.shiftName || "Unknown Shift"}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.nozzle}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 uppercase">
+                                        {row.product}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-600">
+                                    {(row.openingReading || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-600">
+                                    {(row.closingReading || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-200 font-mono">
+                                    {(row.sold || 0).toFixed(2)} L
+                                  </td>
+                                  <td className="px-6 py-5 text-right text-zinc-500 font-mono">
+                                    {row.rate}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono italic">
+                                    Rs. {(row.amount || 0).toLocaleString()}
+                                  </td>
+                                </>
+                              )}
+                              {salesViewMode === "DETAILED_SALES" && (
+                                <>
+                                  <td className="px-6 py-5 font-mono text-xs">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {formatDate(row.date)}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500">
+                                        {formatTime(row.date)}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.name}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 uppercase font-black text-blue-500">
+                                        {row.vehicleNo}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.fuel}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 uppercase">
+                                        {row.nozzle}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-bold text-zinc-200">
+                                    {(row.quantity || 0).toFixed(2)} L
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                                    Rs. {(row.amount || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5">
+                                    <span
+                                      className={cn(
+                                        "px-2 py-0.5 rounded text-[9px] font-black uppercase",
+                                        row.method === "CASH"
+                                          ? "bg-emerald-500/10 text-emerald-500"
+                                          : row.method === "CREDIT"
+                                            ? "bg-rose-500/10 text-rose-500"
+                                            : "bg-blue-500/10 text-blue-500",
+                                      )}
+                                    >
+                                      {row.method}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-5 text-xs text-zinc-400">
+                                    {row.paidTo}
+                                  </td>
+                                  <td className="px-6 py-5">
+                                    <div className="flex flex-col">
+                                      <span className="text-xs text-zinc-300 font-bold">
+                                        {row.shift}
+                                      </span>
+                                      <span className="text-[9px] text-zinc-600">
+                                        by {row.shiftOpener}
+                                      </span>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          ),
+                        )}
+                      </tbody>
+                    </table>
+                    {(Array.isArray(data) ? data : data.records || [])
+                      .length === 0 && (
+                      <div className="py-20 text-center text-zinc-600">
+                        <p className="text-lg font-bold mb-2">
+                          No sales data found
+                        </p>
+                        <p className="text-sm">
+                          Try adjusting your filters or date range
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -977,75 +1084,77 @@ export default function ReportsPage() {
             {/* Purchase Report */}
             {reportType === "PURCHASE" && (
               <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                <table className="w-full text-left text-sm text-zinc-400">
-                  <thead className="bg-zinc-900/80 uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
-                    <tr>
-                      <th className="px-6 py-5">Date</th>
-                      <th className="px-6 py-5">Supplier & Product</th>
-                      <th className="px-6 py-5">Tank</th>
-                      <th className="px-6 py-5 text-right">Qty (L)</th>
-                      <th className="px-6 py-5 text-right">Rate</th>
-                      <th className="px-6 py-5 text-right">Total Cost</th>
-                      <th className="px-6 py-5 text-right">Paid</th>
-                      <th className="px-6 py-5 text-right">Remaining</th>
-                      <th className="px-6 py-5 text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900">
-                    {data.map((p: any) => (
-                      <tr
-                        key={p.id}
-                        className="hover:bg-zinc-100/[0.02] transition-colors"
-                      >
-                        <td className="px-6 py-5 font-mono text-zinc-300 font-bold">
-                          {new Date(p.date).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="flex flex-col">
-                            <span className="text-zinc-100 font-bold">
-                              {p.supplier}
-                            </span>
-                            <span className="text-[10px] text-blue-500 uppercase font-black">
-                              {p.product}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-5 text-zinc-500 text-xs">
-                          {p.tank}
-                        </td>
-                        <td className="px-6 py-5 text-right font-bold text-zinc-200">
-                          {(p.quantity || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-5 text-right font-mono text-zinc-600">
-                          {p.rate}
-                        </td>
-                        <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                          Rs. {(p.totalCost || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-5 text-right font-bold text-emerald-500 font-mono">
-                          {(p.paidAmount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-5 text-right font-bold text-rose-500 font-mono">
-                          {(p.remainingAmount || 0).toLocaleString()}
-                        </td>
-                        <td className="px-6 py-5 text-center">
-                          <span
-                            className={cn(
-                              "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter",
-                              p.paymentStatus === "PAID"
-                                ? "bg-emerald-500/10 text-emerald-500"
-                                : p.paymentStatus === "UNPAID"
-                                  ? "bg-rose-500/10 text-rose-500"
-                                  : "bg-orange-500/10 text-orange-500",
-                            )}
-                          >
-                            {p.paymentStatus}
-                          </span>
-                        </td>
+                <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                  <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                    <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                      <tr>
+                        <th className="px-6 py-5">Date</th>
+                        <th className="px-6 py-5">Supplier & Product</th>
+                        <th className="px-6 py-5">Tank</th>
+                        <th className="px-6 py-5 text-right">Qty (L)</th>
+                        <th className="px-6 py-5 text-right">Rate</th>
+                        <th className="px-6 py-5 text-right">Total Cost</th>
+                        <th className="px-6 py-5 text-right">Paid</th>
+                        <th className="px-6 py-5 text-right">Remaining</th>
+                        <th className="px-6 py-5 text-center">Status</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-900">
+                      {(Array.isArray(data) ? data : []).map((p: any) => (
+                        <tr
+                          key={p.id}
+                          className="hover:bg-zinc-100/[0.02] transition-colors"
+                        >
+                          <td className="px-6 py-5 font-mono text-zinc-300 font-bold">
+                            {formatDate(p.date)}
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-col">
+                              <span className="text-zinc-100 font-bold">
+                                {p.supplier?.name || p.supplier}
+                              </span>
+                              <span className="text-[10px] text-blue-500 uppercase font-black">
+                                {p.tank?.product?.name || p.product}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 text-zinc-500 text-xs">
+                            {p.tank?.name || p.tank}
+                          </td>
+                          <td className="px-6 py-5 text-right font-bold text-zinc-200">
+                            {(p.quantity || 0).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-5 text-right font-mono text-zinc-600">
+                            {p.rate}
+                          </td>
+                          <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                            Rs. {(p.totalCost || 0).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-5 text-right font-bold text-emerald-500 font-mono">
+                            {(p.paidAmount || 0).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-5 text-right font-bold text-rose-500 font-mono">
+                            {(p.remainingAmount || 0).toLocaleString()}
+                          </td>
+                          <td className="px-6 py-5 text-center">
+                            <span
+                              className={cn(
+                                "px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter",
+                                p.status === "PAID"
+                                  ? "bg-emerald-500/10 text-emerald-500"
+                                  : p.status === "UNPAID"
+                                    ? "bg-rose-500/10 text-rose-500"
+                                    : "bg-orange-500/10 text-orange-500",
+                              )}
+                            >
+                              {p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -1097,199 +1206,400 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                  <table className="w-full text-left text-sm text-zinc-400">
-                    <thead className="bg-zinc-900/80 uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
-                      <tr>
-                        <th className="px-6 py-5">Date</th>
-                        <th className="px-6 py-5">Voucher / Description</th>
-                        <th className="px-6 py-5 text-right">Debit (OUT)</th>
-                        <th className="px-6 py-5 text-right text-emerald-500">
-                          Credit (IN)
-                        </th>
-                        <th className="px-6 py-5 text-right text-zinc-100">
-                          Balance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-900">
-                      {data.ledger.map((row: any, i: number) => (
-                        <tr
-                          key={i}
-                          className="hover:bg-zinc-100/[0.02] transition-colors"
-                        >
-                          <td className="px-6 py-5 font-mono text-zinc-300 text-xs">
-                            {new Date(row.date).toLocaleDateString()}
-                          </td>
-                          <td className="px-6 py-5">
-                            <div className="flex flex-col">
-                              <span className="text-zinc-100 font-bold">
-                                {row.description}
-                              </span>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
-                                  {row.type}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-5 text-right font-mono text-rose-400/80">
-                            {row.debit > 0
-                              ? (row.debit || 0).toLocaleString()
-                              : "-"}
-                          </td>
-                          <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
-                            {row.credit > 0
-                              ? (row.credit || 0).toLocaleString()
-                              : "-"}
-                          </td>
-                          <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                            Rs.{" "}
-                            {row.runningBalance?.toLocaleString() ||
-                              row.balance?.toLocaleString() ||
-                              "-"}
-                          </td>
+                  <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                    <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                      <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                        <tr>
+                          <th className="px-6 py-5">Date</th>
+                          <th className="px-6 py-5">Flow Description</th>
+                          <th className="px-6 py-5 text-right">Debit (OUT)</th>
+                          <th className="px-6 py-5 text-right text-emerald-500">
+                            Credit (IN)
+                          </th>
+                          <th className="px-6 py-5 text-right text-zinc-100">
+                            Balance
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900">
+                        {(data?.ledger || []).map((row: any, i: number) => (
+                          <tr
+                            key={i}
+                            className="hover:bg-zinc-100/[0.02] transition-colors"
+                          >
+                            <td className="px-6 py-5 font-mono text-zinc-300 text-xs">
+                              {formatDate(row.date)}
+                            </td>
+                            <td className="px-6 py-5">
+                              <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-zinc-100 font-bold">
+                                    {row.description}
+                                  </span>
+                                  <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
+                                    {row.type}
+                                  </span>
+                                </div>
+
+                                {row.details && (
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
+                                    {ledgerType === "SUPPLIER" ? (
+                                      <>
+                                        <span className="text-zinc-500 italic">
+                                          Purchase Detail:{" "}
+                                          {row.details.quantity}L @ Rs.{" "}
+                                          {row.details.rate}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "font-bold",
+                                            row.details.status === "PAID"
+                                              ? "text-emerald-500"
+                                              : "text-rose-500",
+                                          )}
+                                        >
+                                          Status: {row.details.status} (Paid:
+                                          Rs.{" "}
+                                          {row.details.paidAmount.toLocaleString()}{" "}
+                                          | Rem: Rs.{" "}
+                                          {row.details.remainingAmount.toLocaleString()}
+                                          )
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="text-blue-400 font-black uppercase">
+                                          Vehicle:{" "}
+                                          {row.details.vehicleNumber || "N/A"}
+                                        </span>
+                                        <span className="text-zinc-500">
+                                          {row.details.product} (
+                                          {row.details.quantity}L)
+                                        </span>
+                                        <span className="text-zinc-600">
+                                          via {row.details.nozzle || "Unknown"}
+                                        </span>
+                                        <span className="text-amber-500 font-bold">
+                                          {row.details.shift}
+                                        </span>
+                                        <span className="text-zinc-600">
+                                          @ {row.details.time}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-5 text-right font-mono text-rose-400/80">
+                              {row.debit > 0
+                                ? (row.debit || 0).toLocaleString()
+                                : "-"}
+                            </td>
+                            <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
+                              {row.credit > 0
+                                ? (row.credit || 0).toLocaleString()
+                                : "-"}
+                            </td>
+                            <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                              Rs.{" "}
+                              {row.runningBalance?.toLocaleString() ||
+                                row.balance?.toLocaleString() ||
+                                "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
 
             {/* Trial Balance */}
             {reportType === "TRIAL" && (
-              <div className="overflow-hidden rounded-[40px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm shadow-2xl">
-                <table className="w-full text-left text-sm text-zinc-400 border-collapse">
-                  <thead className="bg-zinc-900 uppercase font-black text-[11px] text-zinc-500 tracking-[0.2em] border-b border-zinc-800">
-                    <tr>
-                      <th className="px-8 py-6">Code</th>
-                      <th className="px-8 py-6">Account Name & Type</th>
-                      <th className="px-8 py-6 text-right">Debit (DR)</th>
-                      <th className="px-8 py-6 text-right">Credit (CR)</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-900 font-medium">
-                    {data.accounts.map((acc: any) => (
-                      <tr
-                        key={acc.code}
-                        className="group hover:bg-zinc-100/[0.03] transition-all"
-                      >
-                        <td className="px-8 py-6 font-mono text-zinc-500 font-bold tracking-tighter">
-                          {acc.code}
-                        </td>
-                        <td className="px-8 py-6">
-                          <div className="flex flex-col">
-                            <span className="text-zinc-100 text-base font-bold tracking-tight">
-                              {acc.name}
-                            </span>
-                            <span className="text-[9px] text-zinc-600 font-black uppercase tracking-widest mt-0.5">
-                              {acc.type}
+              <div className="space-y-6">
+                {/* Explanation Card */}
+                <div className="p-6 rounded-3xl bg-zinc-900/20 border border-zinc-800">
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    <span className="font-black text-zinc-400">
+                      Trial Balance:
+                    </span>{" "}
+                    Lists all accounts with their balances.
+                    <span className="text-blue-400 font-bold"> Debit</span>{" "}
+                    accounts (Assets, Expenses) on left,
+                    <span className="text-emerald-400 font-bold">
+                      {" "}
+                      Credit
+                    </span>{" "}
+                    accounts (Liabilities, Equity, Income) on right.
+                    <span className="text-zinc-100 font-bold">
+                      {" "}
+                      Total Debits must equal Total Credits
+                    </span>{" "}
+                    - if they match, your books are balanced. Click any account
+                    to view its detailed ledger.
+                  </p>
+                </div>
+
+                {/* Balance Status */}
+                <div
+                  className={cn(
+                    "p-6 rounded-3xl border flex items-center justify-between",
+                    data.isBalanced
+                      ? "bg-emerald-500/10 border-emerald-500/20"
+                      : "bg-rose-500/10 border-rose-500/20",
+                  )}
+                >
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-zinc-500 mb-1">
+                      Balance Status
+                    </p>
+                    <p
+                      className={cn(
+                        "text-2xl font-black",
+                        data.isBalanced ? "text-emerald-500" : "text-rose-500",
+                      )}
+                    >
+                      {data.isBalanced
+                        ? "✓ Books are Balanced"
+                        : "✗ Out of Balance"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-zinc-500 mb-1">Total Debits</p>
+                    <p className="text-lg font-mono text-zinc-300">
+                      Rs. {(data.totalDebit || 0).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-zinc-500 mb-1">Total Credits</p>
+                    <p className="text-lg font-mono text-zinc-300">
+                      Rs. {(data.totalCredit || 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Grouped Accounts */}
+                {data.grouped &&
+                  Object.entries(data.grouped).map(
+                    ([type, accounts]: [string, unknown]) => {
+                      const accountsArray = accounts as any[];
+                      return accountsArray.length > 0 && (
+                        <div key={type} className="space-y-3">
+                          <div className="flex items-center gap-3 px-2">
+                            <div
+                              className={cn(
+                                "w-1.5 h-6 rounded-full",
+                                type === "ASSET"
+                                  ? "bg-blue-500"
+                                  : type === "LIABILITY"
+                                    ? "bg-orange-500"
+                                    : type === "EQUITY"
+                                      ? "bg-purple-500"
+                                      : type === "INCOME"
+                                        ? "bg-emerald-500"
+                                        : "bg-rose-500",
+                              )}
+                            />
+                            <h3 className="text-lg font-black text-zinc-100 tracking-tight uppercase">
+                              {type}S
+                            </h3>
+                            <span className="text-xs text-zinc-600">
+                              ({accounts.length} accounts)
                             </span>
                           </div>
+
+                          <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+                            <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                              <thead className="bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                                <tr>
+                                  <th className="px-6 py-4">Code</th>
+                                  <th className="px-6 py-4">Account Name</th>
+                                  <th className="px-6 py-4 text-right">
+                                    Debit (DR)
+                                  </th>
+                                  <th className="px-6 py-4 text-right">
+                                    Credit (CR)
+                                  </th>
+                                  <th className="px-6 py-4 text-right">
+                                    Balance
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-900">
+                                {accountsArray.map((acc: any) => (
+                                  <tr
+                                    key={acc.code}
+                                    onClick={() =>
+                                      router.push(
+                                        `/reports?reportType=LEDGER&accountId=${acc.id}`,
+                                      )
+                                    }
+                                    className="group hover:bg-zinc-100/3 transition-all cursor-pointer"
+                                  >
+                                    <td className="px-6 py-4 font-mono text-zinc-500 font-bold tracking-tighter">
+                                      {acc.code}
+                                    </td>
+                                    <td className="px-6 py-4 text-zinc-100 font-bold">
+                                      {acc.name}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
+                                      {acc.debit > 0 ? (
+                                        <span className="text-blue-400">
+                                          {acc.debit.toLocaleString()}
+                                        </span>
+                                      ) : (
+                                        <span className="text-zinc-800">-</span>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
+                                      {acc.credit > 0 ? (
+                                        <span className="text-emerald-400">
+                                          {acc.credit.toLocaleString()}
+                                        </span>
+                                      ) : (
+                                        <span className="text-zinc-800">-</span>
+                                      )}
+                                    </td>
+                                    <td className="px-6 py-4 text-right font-mono text-zinc-300 font-bold">
+                                      Rs.{" "}
+                                      {Math.abs(acc.balance).toLocaleString()}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+
+                {/* Summary Totals */}
+                <div className="overflow-hidden rounded-[40px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm shadow-2xl">
+                  <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                    <tbody>
+                      <tr className="bg-zinc-100 text-zinc-950 font-black">
+                        <td
+                          className="px-8 py-8 text-xl tracking-tighter"
+                          colSpan={2}
+                        >
+                          GRAND TOTALS
                         </td>
-                        <td className="px-8 py-6 text-right font-mono text-zinc-100 text-lg">
-                          {acc.debit > 0 ? (
-                            (acc.debit || 0).toLocaleString()
-                          ) : (
-                            <span className="text-zinc-800">-</span>
-                          )}
+                        <td className="px-8 py-8 text-right font-mono text-2xl italic text-blue-600">
+                          {(data.totalDebit || 0).toLocaleString()}
                         </td>
-                        <td className="px-8 py-6 text-right font-mono text-zinc-100 text-lg">
-                          {acc.credit > 0 ? (
-                            (acc.credit || 0).toLocaleString()
-                          ) : (
-                            <span className="text-zinc-800">-</span>
-                          )}
+                        <td className="px-8 py-8 text-right font-mono text-2xl italic text-emerald-600">
+                          {(data.totalCredit || 0).toLocaleString()}
+                        </td>
+                        <td className="px-8 py-8 text-right font-mono text-2xl italic">
+                          {data.isBalanced ? "✓ Balanced" : "✗ Error"}
                         </td>
                       </tr>
-                    ))}
-                    <tr className="bg-zinc-100 text-zinc-950 font-black">
-                      <td
-                        className="px-8 py-8 text-xl tracking-tighter"
-                        colSpan={2}
-                      >
-                        TOTALS
-                      </td>
-                      <td className="px-8 py-8 text-right font-mono text-2xl italic">
-                        {(data.totalDebit || 0).toLocaleString()}
-                      </td>
-                      <td className="px-8 py-8 text-right font-mono text-2xl italic">
-                        {(data.totalCredit || 0).toLocaleString()}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
             {/* Balance Sheet */}
             {reportType === "BS" && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 px-2">
-                    <div className="p-2 bg-blue-500/20 rounded-xl text-blue-500">
-                      <TrendingUp size={20} />
+              <div className="space-y-6">
+                {/* Explanation Card */}
+                <div className="p-6 rounded-3xl bg-zinc-900/20 border border-zinc-800">
+                  <p className="text-xs text-zinc-500 leading-relaxed">
+                    <span className="font-black text-zinc-400">
+                      Balance Sheet Formula:
+                    </span>
+                    <span className="text-blue-400 font-bold"> Assets</span>{" "}
+                    (what you own: cash, inventory, equipment) =
+                    <span className="text-orange-400 font-bold">
+                      {" "}
+                      Liabilities
+                    </span>{" "}
+                    (what you owe: supplier debts) +
+                    <span className="text-zinc-100 font-bold">
+                      {" "}
+                      Equity
+                    </span>{" "}
+                    (owner investment) +
+                    <span className="text-emerald-400 font-bold">
+                      {" "}
+                      Net Profit
+                    </span>
+                    . This shows your business financial position at a point in
+                    time.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="p-2 bg-blue-500/20 rounded-xl text-blue-500">
+                        <TrendingUp size={20} />
+                      </div>
+                      <h3 className="text-xl font-black text-zinc-100 tracking-tighter uppercase italic">
+                        Assets
+                      </h3>
                     </div>
-                    <h3 className="text-xl font-black text-zinc-100 tracking-tighter uppercase italic">
-                      Assets
-                    </h3>
+
+                    <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm p-2">
+                      <div className="space-y-1">
+                        <div className="flex justify-between p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all cursor-default">
+                          <div className="flex flex-col">
+                            <span className="text-zinc-100 font-bold">
+                              Total Assets Value
+                            </span>
+                            <span className="text-[10px] text-zinc-500 uppercase font-black">
+                              Current + Fixed
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-2xl font-black font-mono text-blue-500 italic">
+                              Rs. {(data.totalAssets || 0).toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm p-2">
-                    <div className="space-y-1">
-                      <div className="flex justify-between p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all cursor-default">
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="p-2 bg-orange-500/20 rounded-xl text-orange-500">
+                        <Scale size={20} />
+                      </div>
+                      <h3 className="text-xl font-black text-zinc-100 tracking-tighter uppercase italic">
+                        Liabilities & Equity
+                      </h3>
+                    </div>
+
+                    <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm p-2">
+                      <div className="flex justify-between p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all mb-2">
                         <div className="flex flex-col">
                           <span className="text-zinc-100 font-bold">
-                            Total Assets Value
+                            Liabilities & Equity Total
                           </span>
                           <span className="text-[10px] text-zinc-500 uppercase font-black">
-                            Current + Fixed
+                            Combined Valuation
                           </span>
                         </div>
                         <div className="text-right">
-                          <span className="text-2xl font-black font-mono text-blue-500 italic">
-                            Rs. {(data.totalAssets || 0).toLocaleString()}
+                          <span className="text-2xl font-black font-mono text-orange-500 italic">
+                            Rs.{" "}
+                            {(
+                              data.totalLiabilitiesAndEquity || 0
+                            ).toLocaleString()}
                           </span>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 px-2">
-                    <div className="p-2 bg-orange-500/20 rounded-xl text-orange-500">
-                      <Scale size={20} />
-                    </div>
-                    <h3 className="text-xl font-black text-zinc-100 tracking-tighter uppercase italic">
-                      Liabilities & Equity
-                    </h3>
-                  </div>
-
-                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm p-2">
-                    <div className="flex justify-between p-6 rounded-2xl bg-zinc-900/30 border border-zinc-800 hover:border-zinc-700 transition-all mb-2">
-                      <div className="flex flex-col">
-                        <span className="text-zinc-100 font-bold">
-                          Liabilities & Equity Total
-                        </span>
-                        <span className="text-[10px] text-zinc-500 uppercase font-black">
-                          Combined Valuation
+                      <div className="px-6 py-4 flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">
+                          Balanced & Verified
                         </span>
                       </div>
-                      <div className="text-right">
-                        <span className="text-2xl font-black font-mono text-orange-500 italic">
-                          Rs.{" "}
-                          {(
-                            data.totalLiabilitiesAndEquity || 0
-                          ).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="px-6 py-4 flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">
-                        Balanced & Verified
-                      </span>
                     </div>
                   </div>
                 </div>

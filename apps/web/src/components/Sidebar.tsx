@@ -50,7 +50,7 @@ const navItems = [
     roles: ["ADMIN", "MANAGER", "OPERATOR"],
   },
   {
-    name: "Suppliers",
+    name: "Ledgers",
     href: "/suppliers",
     icon: Truck,
     roles: ["ADMIN", "MANAGER"],
@@ -74,7 +74,7 @@ const navItems = [
     roles: ["ADMIN", "MANAGER"],
   },
   {
-    name: "Accounts",
+    name: "Chart of Accounts",
     href: "/accounts",
     icon: Wallet,
     roles: ["ADMIN", "MANAGER"],

@@ -7,9 +7,11 @@ export class CustomLogger implements LoggerService {
   private logsDir: string;
 
   constructor() {
-    this.logsDir = path.join(__dirname, '..', 'logs');
+    // Use project root for logs directory
+    this.logsDir = path.join(process.cwd(), 'logs');
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
+      console.log(`📁 Logs directory created at: ${this.logsDir}`);
     }
   }
 

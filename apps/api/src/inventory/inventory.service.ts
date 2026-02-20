@@ -147,6 +147,7 @@ export class InventoryService {
           tx,
         );
       }
+      await this.accountingService.syncInventoryAccountBalance();
     });
 
     // Notifications (keep existing logic outside transaction for speed or inside for consistency, outside is fine)
@@ -276,6 +277,8 @@ export class InventoryService {
         .catch(() => {});
     }
 
+    await this.accountingService.syncInventoryAccountBalance();
+
     return {
       message: 'Dip recorded and stock adjusted.',
       variance,
@@ -291,10 +294,16 @@ export class InventoryService {
     id: string,
     data: { sellingPrice?: number; purchasePrice?: number },
   ) {
-    return this.prisma.product.update({
+    const product = await this.prisma.product.update({
       where: { id },
       data,
     });
+
+    if (data.purchasePrice !== undefined) {
+      await this.accountingService.syncInventoryAccountBalance();
+    }
+
+    return product;
   }
 
   async deleteTank(id: string) {

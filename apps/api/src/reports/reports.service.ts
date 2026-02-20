@@ -6,6 +6,38 @@ import { AccountType } from '@prisma/client';
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
+  // Helper to format shift names
+  private formatShiftName(shift: any): string {
+    if (!shift || !shift.startTime) return 'Unknown';
+    const date = new Date(shift.startTime);
+    const hours = date.getHours();
+    const period = hours < 12 ? 'M' : 'N';
+    const dateStr = date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+    return `${dateStr} ${period}`;
+  }
+
+  // Helper to format date
+  private formatDate(date: Date): string {
+    return new Date(date).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
+  // Helper to format time
+  private formatTime(date: Date): string {
+    return new Date(date).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
   async getLedger(accountId: string, startDate?: Date, endDate?: Date) {
     const where: any = {
       OR: [{ debitAccountId: accountId }, { creditAccountId: accountId }],
@@ -41,7 +73,6 @@ export class ReportsService {
   async getBalanceSheet() {
     const accounts = await this.prisma.account.findMany();
 
-    // Calculate dynamic inventory value
     const tanks = await this.prisma.tank.findMany({
       include: { product: true },
     });
@@ -50,12 +81,8 @@ export class ReportsService {
     }, 0);
 
     const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
-    const liabilityAccounts = accounts.filter(
-      (a) => a.type === AccountType.LIABILITY,
-    );
-    const equityAccounts = accounts.filter(
-      (a) => a.type === AccountType.EQUITY,
-    );
+    const liabilityAccounts = accounts.filter((a) => a.type === AccountType.LIABILITY);
+    const equityAccounts = accounts.filter((a) => a.type === AccountType.EQUITY);
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
@@ -64,19 +91,12 @@ export class ReportsService {
     const equity: Record<string, number> = {};
 
     assetAccounts.forEach((a) => {
-      // Overwrite 'Fuel Inventory' with dynamic value if it exists, or just valid accounting
-      // Ideally, the accounting system should be in sync, but for "Real Time" value:
       if (a.code === '10401') {
-        // Fuel Inventory
         assets[a.name] = fuelInventoryValue;
       } else {
         assets[a.name] = Number(a.balance);
       }
     });
-    // If 10401 doesn't exist, maybe add it? For now assume it exists.
-
-    // ... rest of logic
-    // (Re-implementing the rest to ensure variables are in scope)
 
     liabilityAccounts.forEach((a) => {
       liabilities[a.name] = Number(a.balance);
@@ -87,15 +107,9 @@ export class ReportsService {
     });
 
     const totalAssets = Object.values(assets).reduce((s, v) => s + v, 0);
-    const totalLiabilities = Object.values(liabilities).reduce(
-      (s, v) => s + v,
-      0,
-    );
+    const totalLiabilities = Object.values(liabilities).reduce((s, v) => s + v, 0);
     const totalEquity = Object.values(equity).reduce((s, v) => s + v, 0);
-
-    const netProfit =
-      income.reduce((sum, a) => sum + Number(a.balance), 0) -
-      expenses.reduce((sum, a) => sum + Number(a.balance), 0);
+    const netProfit = income.reduce((sum, a) => sum + Number(a.balance), 0) - expenses.reduce((sum, a) => sum + Number(a.balance), 0);
 
     return {
       assets,
@@ -104,9 +118,15 @@ export class ReportsService {
       totalAssets,
       totalLiabilities,
       totalEquity,
-      totalLiabilitiesAndEquity: totalLiabilities + totalEquity,
+      totalLiabilitiesAndEquity: totalLiabilities + totalEquity + netProfit,
       netProfit,
-      isBalanced: totalAssets === totalLiabilities + totalEquity + netProfit, // Might differ if dynamic inventory differs from book value
+      isBalanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + netProfit)) < 1,
+      explanation: {
+        assets: 'What the business owns (Cash, Bank, Inventory, Equipment)',
+        liabilities: 'What the business owes (Supplier debts, Customer advances)',
+        equity: 'Owner investment and retained earnings',
+        formula: 'Assets = Liabilities + Equity + Net Profit'
+      }
     };
   }
 
@@ -121,6 +141,211 @@ export class ReportsService {
     shiftId?: string,
     nozzleId?: string,
     productId?: string,
+    paymentType?: string,
+  ) {
+    // Default to DETAILED_SALES if not specified
+    const mode = viewMode || 'DETAILED_SALES';
+
+    // Get base transaction data
+    const baseData = await this.getDetailedSalesReport(
+      startDate,
+      endDate,
+      shiftId,
+      nozzleId,
+      productId,
+      paymentType,
+    );
+
+    // Return based on view mode
+    switch (mode) {
+      case 'DETAILED_SALES':
+        return baseData;
+      
+      case 'DAILY_SUMMARY':
+        return this.aggregateDailySummary(baseData.records);
+      
+      case 'SHIFT_WISE':
+        return this.aggregateShiftWise(baseData.records, startDate, endDate);
+      
+      case 'NOZZLE_WISE':
+        return this.aggregateNozzleWise(startDate, endDate, shiftId);
+      
+      case 'NOZZLE_READINGS':
+        return this.getNozzleReadings(startDate, endDate, shiftId, nozzleId);
+      
+      default:
+        return baseData;
+    }
+  }
+
+  private aggregateDailySummary(records: any[]) {
+    const dailyMap = new Map<string, any>();
+
+    records.forEach((r) => {
+      const date = new Date(r.date);
+      date.setHours(0, 0, 0, 0);
+      const dateKey = date.toISOString().split('T')[0];
+      
+      if (!dailyMap.has(dateKey)) {
+        dailyMap.set(dateKey, {
+          date: date.toISOString(),
+          quantitySold: 0,
+          cashSales: 0,
+          creditSales: 0,
+          totalSales: 0,
+          profit: 0,
+        });
+      }
+      const day = dailyMap.get(dateKey);
+      day.quantitySold += r.quantity;
+      day.totalSales += r.amount;
+      if (r.method === 'CASH') day.cashSales += r.amount;
+      if (r.method === 'CREDIT') day.creditSales += r.amount;
+    });
+
+    return {
+      summary: { totalCustomers: records.length, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      records: Array.from(dailyMap.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    };
+  }
+
+  private async aggregateShiftWise(records: any[], startDate?: Date, endDate?: Date) {
+    const where: any = {};
+    if (startDate || endDate) {
+      where.startTime = {};
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.startTime.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.startTime.lte = end;
+      }
+    }
+
+    const shifts = await this.prisma.shift.findMany({
+      where,
+      include: { opener: true },
+      orderBy: { startTime: 'desc' },
+    });
+
+    const shiftRecords = shifts.map((s) => {
+      const shiftTxs = records.filter((r) => r.shiftId === s.id);
+      return {
+        id: s.id,
+        shiftName: this.formatShiftName(s),
+        operator: s.opener?.username || 'Unknown',
+        startTime: s.startTime,
+        endTime: s.endTime,
+        totalSales: shiftTxs.reduce((sum, t) => sum + t.amount, 0),
+        quantitySold: shiftTxs.reduce((sum, t) => sum + t.quantity, 0),
+        profit: 0,
+      };
+    });
+
+    return {
+      summary: { totalCustomers: records.length, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      records: shiftRecords,
+    };
+  }
+
+  private async aggregateNozzleWise(startDate?: Date, endDate?: Date, shiftId?: string) {
+    const where: any = {};
+    if (shiftId) where.shiftId = shiftId;
+    if (startDate || endDate) {
+      where.shift = { startTime: {} };
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.shift.startTime.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.shift.startTime.lte = end;
+      }
+    }
+
+    const readings = await this.prisma.nozzleReading.findMany({
+      where,
+      include: {
+        nozzle: { include: { tank: { include: { product: true } } } },
+        shift: { include: { opener: true } },
+      },
+    });
+
+    const nozzleRecords = readings.map((r) => ({
+      nozzle: r.nozzle.name,
+      product: r.nozzle.tank.product.name,
+      shiftName: this.formatShiftName(r.shift),
+      openingReading: Number(r.openingReading),
+      closingReading: Number(r.closingReading || r.openingReading),
+      sale: Number(r.closingReading || r.openingReading) - Number(r.openingReading),
+      rate: Number(r.nozzle.tank.product.sellingPrice),
+      totalSale: (Number(r.closingReading || r.openingReading) - Number(r.openingReading)) * Number(r.nozzle.tank.product.sellingPrice),
+    }));
+
+    return {
+      summary: { totalCustomers: 0, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      records: nozzleRecords,
+    };
+  }
+
+  private async getNozzleReadings(startDate?: Date, endDate?: Date, shiftId?: string, nozzleId?: string) {
+    const where: any = {};
+    if (shiftId) where.shiftId = shiftId;
+    if (nozzleId) where.nozzleId = nozzleId;
+    if (startDate || endDate) {
+      where.shift = { startTime: {} };
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.shift.startTime.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.shift.startTime.lte = end;
+      }
+    }
+
+    const readings = await this.prisma.nozzleReading.findMany({
+      where,
+      include: {
+        shift: { include: { opener: true } },
+        nozzle: { include: { tank: { include: { product: true } } } },
+      },
+      orderBy: { shift: { startTime: 'desc' } },
+    });
+
+    const records = readings.map((r) => ({
+      date: r.shift.startTime,
+      shiftId: r.shiftId,
+      shiftName: this.formatShiftName(r.shift),
+      nozzle: r.nozzle.name,
+      product: r.nozzle.tank.product.name,
+      openingReading: Number(r.openingReading),
+      closingReading: Number(r.closingReading || r.openingReading),
+      sold: Number(r.closingReading || r.openingReading) - Number(r.openingReading),
+      rate: Number(r.nozzle.tank.product.sellingPrice),
+      amount: (Number(r.closingReading || r.openingReading) - Number(r.openingReading)) * Number(r.nozzle.tank.product.sellingPrice),
+    }));
+
+    return {
+      summary: { totalCustomers: 0, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      records,
+    };
+  }
+
+  private async getDetailedSalesReport(
+    startDate?: Date,
+    endDate?: Date,
+    shiftId?: string,
+    nozzleId?: string,
+    productId?: string,
+    paymentType?: string,
   ) {
     const where: any = {
       creditAccount: { code: '40101' }, // Fuel Sales
@@ -128,27 +353,46 @@ export class ReportsService {
 
     if (startDate || endDate) {
       where.createdAt = {};
-      if (startDate) where.createdAt.gte = startDate;
-      if (endDate) where.createdAt.lte = endDate;
+      if (startDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        where.createdAt.gte = start;
+      }
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        where.createdAt.lte = end;
+      }
     }
 
     if (shiftId) where.shiftId = shiftId;
     if (nozzleId) where.nozzleId = nozzleId;
     if (productId) where.productId = productId;
 
-    const transactions = await this.prisma.transaction.findMany({
+    // Payment type filter
+    if (paymentType && paymentType !== 'ALL') {
+      if (paymentType === 'CASH') {
+        where.debitAccount = { code: '10101' };
+      } else if (paymentType === 'CREDIT') {
+        where.debitAccount = { code: '10301' };
+      } else if (paymentType === 'BANK') {
+        where.paymentAccountId = { not: null };
+      }
+    }
+
+    const transactions = (await this.prisma.transaction.findMany({
       where,
       include: {
         shift: { include: { opener: { select: { username: true } } } },
-        nozzle: true,
+        nozzle: { include: { tank: { include: { product: true } } } },
         product: true,
         createdBy: { select: { username: true } },
         customer: true,
         paymentAccount: true,
         debitAccount: true,
-      },
+      } as any,
       orderBy: { createdAt: 'desc' },
-    });
+    })) as any[];
 
     // Summary Calculations
     const totalCustomers = transactions.length;
@@ -160,11 +404,11 @@ export class ReportsService {
       { count: number; amount: number }
     >();
 
-    const records = transactions.map((t) => {
+    let records = transactions.map((t: any) => {
       const amount = Number(t.amount);
       const qty = Number(t.quantity || 0);
-      const fuelName = t.product?.name || 'Unknown';
-      const nozzleName = t.nozzle?.name || 'Unknown';
+      const fuelName = (t as any).product?.name || 'Unknown';
+      const nozzleName = (t as any).nozzle?.name || 'Unknown';
 
       // Fuel Type Summary
       const fuelTotal = fuelTypeMap.get(fuelName) || { quantity: 0, amount: 0 };
@@ -183,8 +427,13 @@ export class ReportsService {
 
       // Payment Method Summary
       let method = 'CASH';
-      if (t.debitAccount?.code === '10301') method = 'CREDIT';
-      else if (t.paymentAccount) method = t.paymentAccount.type; // CARD or ONLINE
+      if ((t.debitAccount as any)?.code === '10301') {
+        method = 'CREDIT';
+      } else if (t.paymentAccountId) {
+        method = (t.paymentAccount as any)?.type || 'BANK';
+      } else if ((t.debitAccount as any)?.code === '10101') {
+        method = 'CASH';
+      }
 
       const methodTotal = paymentMethodMap.get(method) || {
         count: 0,
@@ -195,24 +444,29 @@ export class ReportsService {
       paymentMethodMap.set(method, methodTotal);
 
       // Paid To Logic
-      let paidTo = t.createdBy?.username || 'Unknown';
-      if (method === 'CREDIT') paidTo = `Credit (${paidTo})`;
-      else if (t.paymentAccount)
-        paidTo = `${t.paymentAccount.name}${t.paymentAccount.accountNumber ? ` - ${t.paymentAccount.accountNumber}` : ''}`;
+      let paidTo = '-';
+      if ((t.debitAccount as any)?.code === '10301') {
+        paidTo = 'Account Receivable';
+      } else if (t.paymentAccountId) {
+        paidTo = (t.paymentAccount as any)?.name || (t.paymentAccount as any)?.type || 'Bank';
+      } else {
+        paidTo = 'Cash in Hand';
+      }
 
       return {
         id: t.id,
         date: t.createdAt,
-        name: t.customer?.name || 'Customer',
-        vehicleNo: t.customer?.vehicleNumber || '---',
+        name: (t as any).customer?.name || 'Customer',
+        vehicleNo: (t as any).customer?.vehicleNumber || '---',
         nozzle: nozzleName,
         fuel: fuelName,
         quantity: qty,
         amount: amount,
         method: method,
         paidTo: paidTo,
-        shift: t.shift?.opener?.username || 'Unknown',
+        shift: this.formatShiftName((t as any).shift),
         shiftId: t.shiftId,
+        shiftOpener: (t as any).shift?.opener?.username || 'Unknown',
       };
     });
 
@@ -271,7 +525,7 @@ export class ReportsService {
       orderBy: { date: 'desc' },
     });
 
-    return purchases.map((p) => {
+    const purchaseRows = purchases.map((p: any) => {
       const totalCost = Number(p.totalCost);
       const paidAmount = Number(p.paidAmount || 0);
       return {
@@ -288,6 +542,7 @@ export class ReportsService {
         paymentStatus: p.status, // Return as paymentStatus for frontend
       };
     });
+    return purchaseRows;
   }
 
   async getSupplierLedger(
@@ -306,7 +561,7 @@ export class ReportsService {
             supplierId: supplier.id,
             date: { gte: startDate, lte: endDate },
           },
-          include: { tank: true },
+          include: { tank: { include: { product: true } } },
         });
 
         const transactions = await this.prisma.transaction.findMany({
@@ -317,22 +572,40 @@ export class ReportsService {
           include: { debitAccount: true, creditAccount: true },
         });
 
+        let runningBalance = 0;
         const sorted = [
-          ...purchases.map((p) => ({
-            date: p.date,
-            type: 'PURCHASE',
-            description: `Purchase for ${p.tank?.name || 'Tank'} (${supplier.name})`,
-            debit: 0,
-            credit: Number(p.totalCost),
-            refId: p.id,
-          })),
-          ...transactions.map((t) => ({
-            date: t.createdAt,
-            type: 'PAYMENT',
-            description: `${t.description} (${supplier.name})`,
-            debit: Number(t.amount),
-          })),
-        ];
+          ...purchases.map((p: any) => {
+            runningBalance += Number(p.totalCost);
+            return {
+              date: p.date,
+              type: 'PURCHASE',
+              description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
+              debit: 0,
+              credit: Number(p.totalCost),
+              runningBalance,
+              refId: p.id,
+              details: {
+                quantity: Number(p.quantity),
+                rate: Number(p.rate),
+                totalCost: Number(p.totalCost),
+                paidAmount: Number(p.paidAmount),
+                remainingAmount: Number(p.totalCost) - Number(p.paidAmount),
+                status: p.status,
+              },
+            };
+          }),
+          ...transactions.map((t) => {
+            runningBalance -= Number(t.amount);
+            return {
+              date: t.createdAt,
+              type: 'PAYMENT',
+              description: `${t.description} (${supplier.name})`,
+              debit: Number(t.amount),
+              credit: 0,
+              runningBalance,
+            };
+          }),
+        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         allLedger.push(...sorted);
         totalBalance += Number(supplier.balance);
@@ -340,9 +613,7 @@ export class ReportsService {
 
       return {
         supplier: { name: 'All Suppliers' },
-        ledger: allLedger.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        ),
+        ledger: allLedger,
         closingBalance: totalBalance,
       };
     }
@@ -352,39 +623,59 @@ export class ReportsService {
     });
     if (!supplier) throw new Error('Supplier not found');
 
-    // Get purchases and payments
     const purchases = await this.prisma.purchase.findMany({
       where: {
         supplierId,
         date: { gte: startDate, lte: endDate },
       },
-      include: { tank: true },
+      include: {
+        supplier: true,
+        tank: { include: { product: true } },
+      },
     });
 
     const transactions = await this.prisma.transaction.findMany({
       where: {
-        supplierId, // We added this relation
+        supplierId,
         createdAt: { gte: startDate, lte: endDate },
       },
       include: { debitAccount: true, creditAccount: true },
     });
 
-    // Merge and sort
+    let runningBalance = 0;
     const ledger = [
-      ...purchases.map((p) => ({
-        date: p.date,
-        type: 'PURCHASE',
-        description: `Purchase for ${p.tank?.name || 'Tank'}`,
-        debit: 0,
-        credit: Number(p.totalCost), // Current Liability increases (Credit)
-        refId: p.id,
-      })),
-      ...transactions.map((t) => ({
-        date: t.createdAt,
-        type: 'PAYMENT',
-        description: t.description,
-        debit: Number(t.amount), // Liability decreases (Debit)
-      })),
+      ...purchases.map((p) => {
+        const totalCost = Number(p.totalCost);
+        runningBalance += totalCost;
+        return {
+          date: p.date,
+          type: 'PURCHASE',
+          description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
+          debit: 0,
+          credit: totalCost,
+          runningBalance,
+          refId: p.id,
+          details: {
+            quantity: Number(p.quantity),
+            rate: Number(p.rate),
+            totalCost,
+            paidAmount: Number(p.paidAmount || 0),
+            remainingAmount: totalCost - Number(p.paidAmount || 0),
+            status: p.status,
+          },
+        };
+      }),
+      ...transactions.map((t) => {
+        runningBalance -= Number(t.amount);
+        return {
+          date: t.createdAt,
+          type: 'PAYMENT',
+          description: t.description,
+          debit: Number(t.amount),
+          credit: 0,
+          runningBalance,
+        };
+      }),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     return {
@@ -405,41 +696,62 @@ export class ReportsService {
       let totalBalance = 0;
 
       for (const customer of customers) {
-        const creditRecords = await this.prisma.creditRecord.findMany({
+        const creditTransactions = await this.prisma.transaction.findMany({
           where: {
             customerId: customer.id,
-            creditDate: { gte: startDate, lte: endDate },
+            creditAccount: { code: '40101' },
+            debitAccount: { code: '10301' },
+            createdAt: { gte: startDate, lte: endDate },
           },
+          include: { product: true, nozzle: true, shift: true },
         });
 
         const payments = await this.prisma.transaction.findMany({
           where: {
-            OR: [
-              { customerId: customer.id },
-              { description: { contains: customer.name } },
-            ],
+            customerId: customer.id,
+            creditAccount: { code: '10301' },
+            debitAccount: { code: { not: '10301' } },
             createdAt: { gte: startDate, lte: endDate },
           },
         });
 
+        let runningBalance = 0;
         const sorted = [
-          ...creditRecords.map((r) => ({
-            date: r.creditDate,
-            type: 'CREDIT_TAKEN',
-            description: `Credit Usage (${customer.name})`,
-            debit: Number(r.amount),
-            credit: 0,
-            refId: r.id,
-          })),
-          ...payments.map((p) => ({
-            date: p.createdAt,
-            type: 'PAYMENT',
-            description: `${p.description} (${customer.name})`,
-            debit: 0,
-            credit: Number(p.amount),
-            refId: p.id,
-          })),
-        ];
+          ...creditTransactions.map((t: any) => {
+            runningBalance += Number(t.amount);
+            return {
+              date: t.createdAt,
+              type: 'CREDIT_SALE',
+              description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
+              debit: Number(t.amount),
+              credit: 0,
+              runningBalance,
+              refId: t.id,
+              customerName: customer.name,
+              details: {
+                quantity: Number(t.quantity || 0),
+                product: t.product?.name,
+                nozzle: t.nozzle?.name,
+                vehicleNumber: customer.vehicleNumber || '',
+                shift: t.shift ? this.formatShiftName(t.shift) : 'Unknown',
+                time: this.formatTime(t.createdAt),
+              },
+            };
+          }),
+          ...payments.map((p) => {
+            runningBalance -= Number(p.amount);
+            return {
+              date: p.createdAt,
+              type: 'PAYMENT',
+              description: `Payment received - ${p.description || 'Credit payment'}`,
+              debit: 0,
+              credit: Number(p.amount),
+              runningBalance,
+              refId: p.id,
+              customerName: customer.name,
+            };
+          }),
+        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         allLedger.push(...sorted);
         totalBalance += Number(customer.totalCredit);
@@ -447,9 +759,7 @@ export class ReportsService {
 
       return {
         customer: { name: 'All Customers' },
-        ledger: allLedger.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        ),
+        ledger: allLedger,
         currentBalance: totalBalance,
       };
     }
@@ -459,49 +769,60 @@ export class ReportsService {
     });
     if (!customer) throw new Error('Customer not found');
 
-    // Credit Records (Usage)
-    const creditRecords = await this.prisma.creditRecord.findMany({
+    const creditTransactions = await this.prisma.transaction.findMany({
       where: {
         customerId,
-        creditDate: { gte: startDate, lte: endDate },
-      },
-    });
-
-    // Payments (Transactions where customerId is set - New!)
-    // OR Transactions where creditAccount is 'Accounts Receivable' and description matches?
-    // No, we added customerId relation.
-    const payments = await this.prisma.transaction.findMany({
-      where: {
-        OR: [{ customerId }, { description: { contains: customer.name } }],
+        creditAccount: { code: '40101' },
+        debitAccount: { code: '10301' },
         createdAt: { gte: startDate, lte: endDate },
       },
-      // Typically Payment: Debit Cash, Credit A/R.
+      include: { product: true, nozzle: true, shift: true },
     });
-    console.log(
-      `Found ${payments.length} payments for customer ${customer.name}`,
-    );
 
+    const payments = await this.prisma.transaction.findMany({
+      where: {
+        customerId,
+        creditAccount: { code: '10301' },
+        debitAccount: { code: { not: '10301' } },
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    });
+
+    let runningBalance = 0;
     const ledger = [
-      ...creditRecords.map((r) => ({
-        date: r.creditDate,
-        type: 'CREDIT_TAKEN', // Asset increases (Debit)
-        description: 'Credit Usage',
-        debit: Number(r.amount),
-        credit: 0,
-        refId: r.id,
-      })),
-      ...payments.map((p) => ({
-        date: p.createdAt,
-        type: 'PAYMENT', // Asset decreases (Credit)
-        description: p.description,
-        debit: 0,
-        credit: Number(p.amount),
-        refId: p.id,
-      })),
+      ...creditTransactions.map((t: any) => {
+        runningBalance += Number(t.amount);
+        return {
+          date: t.createdAt,
+          type: 'CREDIT_SALE',
+          description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
+          debit: Number(t.amount),
+          credit: 0,
+          runningBalance,
+          refId: t.id,
+          details: {
+            quantity: Number(t.quantity || 0),
+            product: t.product?.name,
+            nozzle: t.nozzle?.name,
+            vehicleNumber: customer.vehicleNumber || '',
+            shift: t.shift ? this.formatShiftName(t.shift) : 'Unknown',
+            time: this.formatTime(t.createdAt),
+          },
+        };
+      }),
+      ...payments.map((p: any) => {
+        runningBalance -= Number(p.amount);
+        return {
+          date: p.createdAt,
+          type: 'PAYMENT',
+          description: `Payment received - ${p.description || 'Credit payment'}`,
+          debit: 0,
+          credit: Number(p.amount),
+          runningBalance,
+          refId: p.id,
+        };
+      }),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    // Calculate running balance? Customer has 'totalCredit'.
-    // This is basically "How much they owe us" (Asset).
 
     return {
       customer,
@@ -511,47 +832,76 @@ export class ReportsService {
   }
 
   async getTrialBalance() {
-    const accounts = await this.prisma.account.findMany();
+    const accounts = await this.prisma.account.findMany({
+      orderBy: { code: 'asc' },
+    });
+
     const trialBalance = accounts.map((a) => {
       const bal = Number(a.balance);
       const isDebitNature = a.type === 'ASSET' || a.type === 'EXPENSE';
 
       return {
+        id: a.id,
         code: a.code,
         name: a.name,
         type: a.type,
         debit: isDebitNature ? bal : 0,
         credit: !isDebitNature ? bal : 0,
+        balance: bal,
       };
     });
 
     const totalDebit = trialBalance.reduce((s, a) => s + a.debit, 0);
     const totalCredit = trialBalance.reduce((s, a) => s + a.credit, 0);
 
+    // Group by type for better organization
+    const grouped = {
+      ASSET: trialBalance.filter(a => a.type === 'ASSET'),
+      LIABILITY: trialBalance.filter(a => a.type === 'LIABILITY'),
+      EQUITY: trialBalance.filter(a => a.type === 'EQUITY'),
+      INCOME: trialBalance.filter(a => a.type === 'INCOME'),
+      EXPENSE: trialBalance.filter(a => a.type === 'EXPENSE'),
+    };
+
     return {
       accounts: trialBalance,
+      grouped,
       totalDebit,
       totalCredit,
-      isBalanced: Math.abs(totalDebit - totalCredit) < 0.01, // Floating point tolerance
+      isBalanced: Math.abs(totalDebit - totalCredit) < 0.01,
     };
   }
   async getProfitLoss(startDate?: Date, endDate?: Date) {
-    // Re-using Balance Sheet logic but focused on P&L
-    // Ideally extract common logic
     const accounts = await this.prisma.account.findMany();
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
+    const incomeBreakdown = income.map(a => ({
+      name: a.name,
+      code: a.code,
+      amount: Number(a.balance)
+    }));
+
+    const expenseBreakdown = expenses.map(a => ({
+      name: a.name,
+      code: a.code,
+      amount: Number(a.balance)
+    }));
+
     const totalIncome = income.reduce((sum, a) => sum + Number(a.balance), 0);
-    const totalExpense = expenses.reduce(
-      (sum, a) => sum + Number(a.balance),
-      0,
-    );
+    const totalExpense = expenses.reduce((sum, a) => sum + Number(a.balance), 0);
 
     return {
       income: totalIncome,
       expense: totalExpense,
       netProfit: totalIncome - totalExpense,
+      incomeBreakdown,
+      expenseBreakdown,
+      explanation: {
+        income: 'Total revenue from fuel sales and other income sources',
+        expense: 'Total costs including fuel purchases, salaries, utilities, etc.',
+        netProfit: 'Income minus Expenses = Net Profit (or Loss if negative)'
+      }
     };
   }
 

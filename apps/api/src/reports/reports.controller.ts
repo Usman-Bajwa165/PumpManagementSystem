@@ -63,6 +63,7 @@ export class ReportsController {
     @Query('shiftId') shiftId?: string,
     @Query('nozzleId') nozzleId?: string,
     @Query('productId') productId?: string,
+    @Query('paymentType') paymentType?: string,
   ) {
     return this.reportsService.getSalesReport(
       startDate ? new Date(startDate) : undefined,
@@ -71,6 +72,7 @@ export class ReportsController {
       shiftId,
       nozzleId,
       productId,
+      paymentType,
     );
   }
 

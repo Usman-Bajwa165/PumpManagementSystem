@@ -12,8 +12,11 @@ export default function SetupPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [tanks, setTanks] = useState<any[]>([]);
   const [nozzles, setNozzles] = useState<any[]>([]);
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("products");
+  const [editingPayment, setEditingPayment] = useState<string | null>(null);
+  const [editPaymentData, setEditPaymentData] = useState({ name: "", type: "", accountNumber: "" });
   const toast = useToast();
   const { user } = useAuth();
   const router = useRouter();
@@ -22,6 +25,7 @@ export default function SetupPage() {
   const [productForm, setProductForm] = useState({ name: "", sellingPrice: "", purchasePrice: "" });
   const [tankForm, setTankForm] = useState({ name: "", capacity: "", productId: "", currentStock: "" });
   const [nozzleForm, setNozzleForm] = useState({ name: "", tankId: "", lastReading: "" });
+  const [paymentForm, setPaymentForm] = useState({ name: "", type: "ONLINE", accountNumber: "" });
   const [stockWarning, setStockWarning] = useState("");
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editSellingPrice, setEditSellingPrice] = useState("");
@@ -72,14 +76,16 @@ export default function SetupPage() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, tanksRes, nozzlesRes] = await Promise.all([
+      const [productsRes, tanksRes, nozzlesRes, paymentRes] = await Promise.all([
         api.get("/inventory/products"),
         api.get("/inventory/tanks"),
         api.get("/inventory/nozzles"),
+        api.get("/payment-accounts"),
       ]);
       setProducts(productsRes.data);
       setTanks(tanksRes.data);
       setNozzles(nozzlesRes.data);
+      setPaymentAccounts(paymentRes.data);
     } catch (err) {
       toast.error("Failed to Load", "Unable to fetch data");
     } finally {
@@ -179,6 +185,41 @@ export default function SetupPage() {
     }
   };
 
+  const handleCreatePaymentAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post("/payment-accounts", paymentForm);
+      toast.success("Payment Account Created", `${paymentForm.name} added successfully`);
+      setPaymentForm({ name: "", type: "ONLINE", accountNumber: "" });
+      fetchData();
+    } catch (err: any) {
+      toast.error("Creation Failed", err.response?.data?.message || "Unable to create payment account");
+    }
+  };
+
+  const handleDeletePaymentAccount = async (id: string, name: string) => {
+    if (!confirm(`Delete payment account "${name}"?`)) return;
+    try {
+      await api.delete(`/payment-accounts/${id}`);
+      toast.success("Deleted", `${name} removed`);
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to delete");
+    }
+  };
+
+  const handleUpdatePaymentAccount = async (id: string, name: string) => {
+    try {
+      await api.put(`/payment-accounts/${id}`, editPaymentData);
+      toast.success("Updated", `${name} updated successfully`);
+      setEditingPayment(null);
+      setEditPaymentData({ name: "", type: "", accountNumber: "" });
+      fetchData();
+    } catch (err: any) {
+      toast.error("Failed", err.response?.data?.message || "Unable to update");
+    }
+  };
+
   const handleUpdatePrice = async (id: string, name: string) => {
     try {
       await api.patch(`/inventory/products/${id}`, { 
@@ -221,7 +262,7 @@ export default function SetupPage() {
         </div>
 
         <div className="flex gap-2 border-b border-zinc-200 dark:border-zinc-800">
-          {["products", "tanks", "nozzles"].map((tab) => (
+          {["products", "tanks", "nozzles", "payments"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -231,7 +272,7 @@ export default function SetupPage() {
                   : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
               }`}
             >
-              {tab}
+              {tab === "payments" ? "Payment Accounts" : tab}
             </button>
           ))}
         </div>
@@ -637,6 +678,152 @@ export default function SetupPage() {
                       >
                         <Trash2 size={16} />
                       </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "payments" && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {!isReadOnly && (
+            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Payment Account</h2>
+              <form onSubmit={handleCreatePaymentAccount} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    Account Name
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={paymentForm.name}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, name: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    placeholder="e.g., JazzCash, EasyPaisa, Bank Transfer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    Type
+                  </label>
+                  <select
+                    value={paymentForm.type}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, type: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="ONLINE">Online</option>
+                    <option value="CARD">Card</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    Account Number (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={paymentForm.accountNumber}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, accountNumber: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    placeholder="03XX-XXXXXXX or Account #"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                >
+                  <Plus size={18} />
+                  Add Payment Account
+                </button>
+              </form>
+            </div>
+            )}
+
+            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Payment Accounts</h2>
+              <div className="space-y-2">
+                {paymentAccounts.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No payment accounts configured yet</p>
+                ) : (
+                  paymentAccounts.map((pa) => (
+                    <div
+                      key={pa.id}
+                      className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
+                    >
+                      <div className="flex-1">
+                        {editingPayment === pa.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={editPaymentData.name}
+                              onChange={(e) => setEditPaymentData({ ...editPaymentData, name: e.target.value })}
+                              className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                              placeholder="Account Name"
+                              autoFocus
+                            />
+                            <select
+                              value={editPaymentData.type}
+                              onChange={(e) => setEditPaymentData({ ...editPaymentData, type: e.target.value })}
+                              className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                            >
+                              <option value="ONLINE">Online</option>
+                              <option value="CARD">Card</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={editPaymentData.accountNumber}
+                              onChange={(e) => setEditPaymentData({ ...editPaymentData, accountNumber: e.target.value })}
+                              className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                              placeholder="Account Number (Optional)"
+                            />
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleUpdatePaymentAccount(pa.id, pa.name)}
+                                className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingPayment(null);
+                                  setEditPaymentData({ name: "", type: "", accountNumber: "" });
+                                }}
+                                className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="font-bold text-zinc-900 dark:text-zinc-100">{pa.name}</p>
+                            <p className="text-sm text-zinc-500">
+                              {pa.type} {pa.accountNumber && `| ${pa.accountNumber}`}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      {!isReadOnly && !editingPayment && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingPayment(pa.id);
+                              setEditPaymentData({ name: pa.name, type: pa.type, accountNumber: pa.accountNumber || "" });
+                            }}
+                            className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePaymentAccount(pa.id, pa.name)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))

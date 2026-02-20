@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Put,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -39,6 +40,15 @@ export class PaymentAccountsController {
   @Roles(Role.ADMIN, Role.MANAGER)
   @Patch(':id')
   update(
+    @Param('id') id: string,
+    @Body() data: { name?: string; type?: string; accountNumber?: string },
+  ) {
+    return this.service.update(id, data);
+  }
+
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @Put(':id')
+  updatePut(
     @Param('id') id: string,
     @Body() data: { name?: string; type?: string; accountNumber?: string },
   ) {
