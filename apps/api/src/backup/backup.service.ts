@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomLogger } from '../logger/custom-logger.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
@@ -14,6 +15,7 @@ export class BackupService {
   constructor(
     private prisma: PrismaService,
     private readonly logger: CustomLogger,
+    private whatsapp: WhatsappService,
   ) {
     const homeDir = os.homedir();
     const platform = os.platform();
@@ -83,7 +85,7 @@ export class BackupService {
         true,
       );
 
-      this.sendBackupNotification({
+      await this.sendBackupNotification({
         filename,
         size: `${sizeKB} KB`,
         path: this.backupDir,
@@ -132,7 +134,7 @@ export class BackupService {
         true,
       );
 
-      this.sendBackupNotification({
+      await this.sendBackupNotification({
         filename,
         size: `${sizeKB} KB`,
         path: this.backupDir,
@@ -208,7 +210,7 @@ export class BackupService {
         true,
       );
 
-      this.sendBackupNotification({
+      await this.sendBackupNotification({
         filename,
         size: `${sizeKB} KB`,
         path: this.backupDir,
@@ -235,10 +237,15 @@ export class BackupService {
     doc.pipe(stream);
 
     const now = new Date();
-    const formattedDate = now.toLocaleString('en-PK', {
+    // Format date as "21 Feb 2026, 12:04 AM"
+    const formattedDate = now.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
       timeZone: 'Asia/Karachi',
-      dateStyle: 'full',
-      timeStyle: 'long',
     });
 
     // Get last auto backup timestamp for incremental backups
@@ -247,150 +254,123 @@ export class BackupService {
       sinceDate = this.getLastAutoBackupDate();
     }
 
-    // Header
+    // Professional Header
+    doc.rect(0, 0, doc.page.width, 120).fill('#18181b'); // Dark Zinc-950
+
     doc
-      .fontSize(24)
+      .fontSize(22)
+      .fillColor('#ffffff')
       .font('Helvetica-Bold')
-      .text('PETROL PUMP MANAGEMENT SYSTEM', { align: 'center' });
-    doc.moveDown(0.5);
+      .text('PETROL PUMP MANAGEMENT SYSTEM', 50, 45, { align: 'center' });
+
     doc
-      .fontSize(18)
-      .fillColor('#666')
-      .text(isFull ? 'Complete Database Backup' : 'Incremental Backup', {
+      .fontSize(12)
+      .fillColor('#ef4444') // Red-500
+      .text(isFull ? 'COMPLETE DATABASE BACKUP' : 'INCREMENTAL BACKUP', {
         align: 'center',
       });
-    doc.moveDown(0.5);
+
+    doc.moveDown(1.5);
     doc
       .fontSize(10)
-      .fillColor('#999')
-      .text(
-        `${type} Backup${period ? ` (${period === 'D' ? 'Day - 12:00 PM' : 'Night - 12:00 AM'})` : ''}`,
-        { align: 'center' },
-      );
-    doc.fontSize(10).text(`Generated: ${formattedDate}`, { align: 'center' });
-    if (sinceDate) {
-      doc
-        .fontSize(9)
-        .fillColor('#666')
-        .text(
-          `Data since: ${sinceDate.toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`,
-          { align: 'center' },
-        );
-    }
-    doc.moveDown(2);
+      .fillColor('#71717a') // Zinc-400
+      .text(`Generated: ${formattedDate}`, { align: 'right' });
 
-    // Users (always all users)
+    if (sinceDate) {
+      const formattedSince = sinceDate.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'Asia/Karachi',
+      });
+      doc.text(`Data Coverage Since: ${formattedSince}`, { align: 'right' });
+    }
+
+    doc.moveDown(2);
+    doc.fillColor('#000000'); // Reset to black
+
+    // Users
     const users = await this.prisma.user.findMany();
-    this.addSection(doc, 'USERS', users.length);
+    this.addSection(doc, 'SYSTEM USERS', users.length);
     users.forEach((user, idx) => {
       doc
         .fontSize(10)
-        .fillColor('#000')
-        .text(`${idx + 1}. ${user.username} (${user.role})`, { indent: 20 });
-    });
-    doc.moveDown();
-
-    // Shifts (filtered by date for incremental)
-    const shiftsWhere = sinceDate ? { startTime: { gte: sinceDate } } : {};
-    const shifts = await this.prisma.shift.findMany({
-      where: shiftsWhere,
-      include: { opener: true, closer: true },
-      orderBy: { startTime: 'desc' },
-    });
-    this.addSection(
-      doc,
-      isFull ? 'ALL SHIFTS' : 'SHIFTS (Since Last Backup)',
-      shifts.length,
-    );
-    shifts.forEach((shift, idx) => {
-      const status = shift.status === 'OPEN' ? '🟢 OPEN' : '🔴 CLOSED';
-      const startTime = new Date(shift.startTime).toLocaleString('en-PK', {
-        timeZone: 'Asia/Karachi',
-      });
-      const endTime = shift.endTime
-        ? new Date(shift.endTime).toLocaleString('en-PK', {
-            timeZone: 'Asia/Karachi',
-          })
-        : 'N/A';
-      doc
-        .fontSize(8)
-        .fillColor('#000')
+        .font('Helvetica')
         .text(
-          `${idx + 1}. ${status} | Opened: ${shift.opener.username} | Start: ${startTime} | End: ${endTime}`,
+          `${idx + 1}. ${user.username.padEnd(20)} | Role: ${user.role} | Status: Active`,
           { indent: 20 },
         );
     });
     doc.moveDown();
 
-    // Products (always all products)
-    const products = await this.prisma.product.findMany();
-    this.addSection(doc, 'PRODUCTS', products.length);
-    products.forEach((product, idx) => {
+    // Shifts
+    const shiftsWhere = sinceDate ? { startTime: { gte: sinceDate } } : {};
+    const shifts = await this.prisma.shift.findMany({
+      where: shiftsWhere,
+      include: { opener: true, closer: true },
+      orderBy: { startTime: 'desc' },
+      take: isFull ? undefined : 50,
+    });
+    this.addSection(
+      doc,
+      isFull ? 'SHIFT RECORDS' : 'RECENT SHIFTS',
+      shifts.length,
+    );
+    shifts.forEach((shift, idx) => {
+      const startTime = new Date(shift.startTime).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
       doc
-        .fontSize(10)
-        .fillColor('#000')
+        .fontSize(9)
         .text(
-          `${idx + 1}. ${product.name} - Selling: Rs. ${product.sellingPrice.toString()}/L, Purchase: Rs. ${product.purchasePrice.toString()}/L`,
-          {
-            indent: 20,
-          },
+          `${idx + 1}. [${shift.status}] Opened by ${shift.opener.username} at ${startTime}`,
+          { indent: 20 },
         );
     });
     doc.moveDown();
 
-    // Tanks (always current state)
+    // Inventory
     const tanks = await this.prisma.tank.findMany({
       include: { product: true },
     });
-    this.addSection(doc, 'INVENTORY - TANKS (Current State)', tanks.length);
+    this.addSection(doc, 'INVENTORY STATUS', tanks.length);
     tanks.forEach((tank, idx) => {
       const percentage = (
         (Number(tank.currentStock) / Number(tank.capacity)) *
         100
       ).toFixed(1);
       doc
-        .fontSize(9)
-        .fillColor('#000')
+        .fontSize(10)
         .text(
-          `${idx + 1}. ${tank.name} (${tank.product.name}) | Stock: ${tank.currentStock.toString()}L / ${tank.capacity.toString()}L (${percentage}%)`,
+          `${idx + 1}. ${tank.name} (${tank.product.name}): ${tank.currentStock.toString()}L / ${tank.capacity.toString()}L (${percentage}%)`,
           { indent: 20 },
         );
     });
     doc.moveDown();
 
-    // Nozzles (always current state)
-    const nozzles = await this.prisma.nozzle.findMany({
-      include: { tank: { include: { product: true } } },
-    });
-    this.addSection(doc, 'NOZZLES (Current State)', nozzles.length);
-    nozzles.forEach((nozzle, idx) => {
-      doc
-        .fontSize(9)
-        .fillColor('#000')
-        .text(
-          `${idx + 1}. ${nozzle.name} | Tank: ${nozzle.tank.name} (${nozzle.tank.product.name}) | Last Reading: ${nozzle.lastReading.toString()}`,
-          { indent: 20 },
-        );
-    });
-    doc.moveDown();
-
-    // Accounts (always current state)
+    // Ledgers
     const accounts = await this.prisma.account.findMany({
       orderBy: { code: 'asc' },
     });
-    this.addSection(doc, 'CHART OF ACCOUNTS (Current State)', accounts.length);
+    this.addSection(doc, 'FINANCIAL LEDGERS', accounts.length);
     accounts.forEach((account, idx) => {
       doc
         .fontSize(9)
-        .fillColor('#000')
         .text(
-          `${idx + 1}. [${account.code}] ${account.name} (${account.type}) - Balance: Rs. ${account.balance.toString()}`,
+          `${idx + 1}. [${account.code}] ${account.name.padEnd(30)} | Balance: Rs. ${Number(account.balance).toLocaleString()}`,
           { indent: 20 },
         );
     });
     doc.moveDown();
 
-    // Transactions (filtered by date for incremental)
+    // Transactions
     const transactionsWhere = sinceDate
       ? { createdAt: { gte: sinceDate } }
       : {};
@@ -398,42 +378,49 @@ export class BackupService {
       where: transactionsWhere,
       include: { debitAccount: true, creditAccount: true },
       orderBy: { createdAt: 'desc' },
+      take: isFull ? undefined : 200,
     });
     this.addSection(
       doc,
-      isFull ? 'ALL TRANSACTIONS' : 'TRANSACTIONS (Since Last Backup)',
+      isFull ? 'ALL TRANSACTIONS' : 'RECENT TRANSACTIONS',
       transactions.length,
     );
     transactions.forEach((tx, idx) => {
-      const date = new Date(tx.createdAt).toLocaleString('en-PK', {
-        timeZone: 'Asia/Karachi',
+      const txDate = new Date(tx.createdAt).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
       });
       doc
-        .fontSize(7)
-        .fillColor('#000')
+        .fontSize(8)
         .text(
-          `${idx + 1}. Rs. ${tx.amount.toString()} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name} | ${date}`,
+          `${idx + 1}. ${txDate} | Rs. ${Number(tx.amount).toLocaleString().padStart(10)} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name}`,
           { indent: 20 },
         );
-      if ((idx + 1) % 40 === 0 && idx < transactions.length - 1) {
+
+      if ((idx + 1) % 45 === 0 && idx < transactions.length - 1) {
         doc.addPage();
       }
     });
 
-    // Footer
-    doc.moveDown(2);
-    doc.fontSize(8).fillColor('#999').text('─'.repeat(80), { align: 'center' });
+    // Signature/Footer
+    doc.moveDown(3);
+    const bottom = doc.page.height - 70;
     doc
       .fontSize(8)
-      .text('© 2026 Petrol Pump Management System | All Rights Reserved', {
-        align: 'center',
-      });
-    doc
-      .fontSize(7)
+      .fillColor('#71717a')
       .text(
-        `Total Records: ${users.length + shifts.length + products.length + tanks.length + nozzles.length + accounts.length + transactions.length}`,
+        'PETROL PUMP MANAGEMENT SYSTEM PORTABLE DATABASE BACKUP',
+        50,
+        bottom,
         { align: 'center' },
       );
+    doc.text(
+      '© 2026 PPMS | This is an electronically generated secure document.',
+      { align: 'center' },
+    );
 
     doc.end();
     return new Promise<void>((resolve, reject) => {
@@ -499,7 +486,7 @@ export class BackupService {
     }
   }
 
-  private sendBackupNotification(data: {
+  private async sendBackupNotification(data: {
     filename: string;
     size: string;
     path: string;
@@ -507,11 +494,15 @@ export class BackupService {
     user: string;
   }) {
     try {
-      // This will be injected via WhatsappService
-      // For now, just log it
-      this.logger.log(
-        `📦 Backup notification: ${data.filename} (${data.size}) by ${data.user}`,
-      );
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      if (prefs && prefs.phoneNumber) {
+        const filePath = path.join(data.path, data.filename);
+        const caption = `📦 *System Backup Success* 📦\nType: ${data.type}\nFile: ${data.filename}\nSize: ${data.size}\nBy: ${data.user}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+
+        await this.whatsapp.sendFile(prefs.phoneNumber, filePath, caption);
+
+        this.logger.log(`Backup file sent to WhatsApp: ${data.filename}`);
+      }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send backup notification: ${errorMsg}`);

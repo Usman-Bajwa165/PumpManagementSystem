@@ -49,6 +49,7 @@ export default function InventoryPage() {
   const [cost, setCost] = useState("");
   const [supplier, setSupplier] = useState("");
   const [dipReading, setDipReading] = useState("");
+  const [stockLoss, setStockLoss] = useState("");
   const [capacityWarning, setCapacityWarning] = useState("");
   const [pricePerLiter, setPricePerLiter] = useState(0);
 
@@ -128,15 +129,26 @@ export default function InventoryPage() {
     e.preventDefault();
     setIsSubmitting(true);
     setError("");
+    const tank = tanks.find((t) => t.id === selectedTank);
+    if (tank && Number(dipReading) > tank.capacity) {
+      setError(`Reading cannot exceed capacity (${tank.capacity}L)`);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const res = await api.post("/inventory/dip", {
         tankId: selectedTank,
         dipReading: Number(dipReading),
+        loss: Number(stockLoss),
       });
       setSuccess(
         `Dip recorded! Variance: ${(res.data as any).variance.toFixed(2)}L`,
       );
       setShowDipModal(false);
+      setDipReading("");
+      setStockLoss("");
+      setSelectedTank("");
       setCapacityWarning("");
       fetchData();
     } catch (err: any) {
@@ -503,7 +515,18 @@ export default function InventoryPage() {
                     required
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-200 outline-none focus:border-blue-600 transition-all"
                     value={selectedTank}
-                    onChange={(e) => setSelectedTank(e.target.value)}
+                    onChange={(e) => {
+                      const tankId = e.target.value;
+                      setSelectedTank(tankId);
+                      const tank = tanks.find((t) => t.id === tankId);
+                      if (tank && dipReading) {
+                        const calculatedLoss = Math.max(
+                          0,
+                          Number(tank.currentStock) - Number(dipReading),
+                        );
+                        setStockLoss(calculatedLoss.toString());
+                      }
+                    }}
                   >
                     <option value="">Select Tank...</option>
                     {tanks.map((t) => (
@@ -514,20 +537,65 @@ export default function InventoryPage() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
-                    Dip Reading (Liters)
-                  </label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="0.00"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-6 text-3xl font-black text-center text-zinc-100 outline-none focus:border-blue-600 transition-all font-mono placeholder:text-zinc-800"
-                    value={dipReading}
-                    onChange={(e) => setDipReading(e.target.value)}
-                  />
-                  <p className="text-center text-xs text-zinc-600">
-                    Enter the actual volume found in tank
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                      Dip Reading (L)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-xl font-bold text-zinc-100 outline-none focus:border-blue-600 transition-all font-mono"
+                      value={dipReading}
+                      onChange={(e) => {
+                        const reading = e.target.value;
+                        setDipReading(reading);
+                        const tank = tanks.find((t) => t.id === selectedTank);
+                        if (tank && reading) {
+                          const calculatedLoss = Math.max(
+                            0,
+                            Number(tank.currentStock) - Number(reading),
+                          );
+                          setStockLoss(calculatedLoss.toString());
+
+                          if (Number(reading) > tank.capacity) {
+                            setCapacityWarning("Reading exceeds capacity!");
+                          } else {
+                            setCapacityWarning("");
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                      Stock Loss (L)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      placeholder="0.00"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3.5 text-xl font-bold text-zinc-100 outline-none focus:border-blue-600 transition-all font-mono"
+                      value={stockLoss}
+                      onChange={(e) => setStockLoss(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {capacityWarning && (
+                  <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-500 text-xs font-bold flex items-center gap-2">
+                    <AlertTriangle size={14} />
+                    {capacityWarning}
+                  </div>
+                )}
+
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                  <p className="text-center text-[10px] text-zinc-500 uppercase tracking-widest font-bold">
+                    Calculation Info
+                  </p>
+                  <p className="text-center text-xs text-zinc-600 mt-1">
+                    System Stock - Physical Reading = Predicted Loss
                   </p>
                 </div>
 

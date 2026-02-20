@@ -114,7 +114,7 @@ export class ShiftsService {
     } catch (error: any) {
       this.logger.error(
         `Shift start failed`,
-        error.message,
+        (error as Error).message,
         'ShiftsService',
         userId,
       );
@@ -242,7 +242,7 @@ export class ShiftsService {
           readingsData.forEach((r) => {
             msg += `${r.nozzle} (${r.product}):\n  Opening: ${r.opening}L\n  Closing: ${r.closing}L\n  Sold: ${r.sold}L\n\n`;
           });
-          msg += `*Sales Summary:*\nTotal: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCredit: Rs. ${summary.creditSales}`;
+          msg += `*Sales Summary:*\nTotal: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCard: Rs. ${summary.cardSales}\nOnline: Rs. ${summary.onlineSales}\nCredit: Rs. ${summary.creditSales}`;
           const now = new Date();
           const dateStr = now.toLocaleDateString('en-GB', {
             day: '2-digit',
@@ -273,7 +273,7 @@ export class ShiftsService {
     } catch (error: any) {
       this.logger.error(
         `Shift close failed`,
-        error.message,
+        (error as Error).message,
         'ShiftsService',
         userId,
       );

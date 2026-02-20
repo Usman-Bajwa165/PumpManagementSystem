@@ -230,14 +230,39 @@ export default function ReportsPage() {
     if (!data) return;
     const doc = new jsPDF();
     const title = tabs.find((t) => t.id === reportType)?.label || "Report";
-    const date = new Date().toLocaleDateString();
 
-    doc.setFontSize(20);
-    doc.text(title, 14, 22);
-    doc.setFontSize(11);
-    doc.setTextColor(100);
-    doc.text(`Generated on: ${date}`, 14, 30);
-    doc.text(`Period: ${dateRange.start} to ${dateRange.end}`, 14, 36);
+    // Professional Header with styling
+    doc.setFillColor(24, 24, 27); // Zinc-950
+    doc.rect(0, 0, 210, 40, "F");
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("PETROL PUMP MANAGEMENT SYSTEM", 105, 18, { align: "center" });
+
+    doc.setFontSize(14);
+    doc.setTextColor(239, 68, 68); // Red-500
+    doc.text(title.toUpperCase(), 105, 28, { align: "center" });
+
+    const now = new Date();
+    const formattedNow = now.toLocaleString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    doc.setTextColor(113, 113, 122); // Zinc-400
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Generated on: ${formattedNow}`, 196, 35, { align: "right" });
+    doc.text(
+      `Period: ${formatDate(dateRange.start)} to ${formatDate(dateRange.end)}`,
+      14,
+      35,
+    );
 
     let tableData: any[] = [];
     let columns: string[] = [];
@@ -248,16 +273,16 @@ export default function ReportsPage() {
         columns = [
           "Date",
           "Qty Sold",
-          "Cash",
-          "Credit",
+          "Cash Sales",
+          "Credit Sales",
           "Total Sale",
           "Profit",
         ];
         tableData = records.map((r: any) => [
-          new Date(r.date).toLocaleDateString(),
+          formatDate(r.date),
           `${(r.quantitySold || 0).toFixed(2)} L`,
-          (r.cashSales || 0).toLocaleString(),
-          (r.creditSales || 0).toLocaleString(),
+          `Rs. ${(r.cashSales || 0).toLocaleString()}`,
+          `Rs. ${(r.creditSales || 0).toLocaleString()}`,
           `Rs. ${(r.totalSales || 0).toLocaleString()}`,
           `Rs. ${(r.profit || 0).toLocaleString()}`,
         ]);
@@ -265,26 +290,23 @@ export default function ReportsPage() {
         columns = [
           "Date/Time",
           "Customer",
-          "Vehicle",
-          "Fuel",
+          "Product",
           "Qty",
           "Amount",
           "Method",
-          "Paid To",
+          "Operator",
         ];
         tableData = records.map((r: any) => [
-          new Date(r.date).toLocaleString(),
-          r.name,
-          r.vehicleNo,
-          r.fuel,
+          formatDateTime(r.date),
+          r.name || "---",
+          r.fuel || r.product || "---",
           `${(r.quantity || 0).toFixed(2)} L`,
           `Rs. ${(r.amount || 0).toLocaleString()}`,
-          r.method,
-          r.paidTo,
+          r.method || "---",
+          r.paidTo || "---",
         ]);
       } else {
-        // Generic sales view handler
-        columns = ["Nozzle/Operator", "Product", "Qty", "Amount"];
+        columns = ["Nozzle/Operator", "Product", "Qty Sold", "Total Amount"];
         tableData = records.map((r: any) => [
           r.nozzle || r.operator || "---",
           r.product || "---",
@@ -293,40 +315,45 @@ export default function ReportsPage() {
         ]);
       }
     } else if (reportType === "PURCHASE") {
-      columns = ["Date", "Supplier", "Product", "Qty", "Total Cost", "Status"];
+      columns = [
+        "Date",
+        "Supplier",
+        "Product",
+        "Quantity",
+        "Total Cost",
+        "Status",
+      ];
       tableData = data.map((p: any) => [
-        new Date(p.date).toLocaleDateString(),
-        p.supplier,
-        p.product,
-        (p.quantity || 0).toLocaleString(),
+        formatDate(p.date),
+        p.supplier || "---",
+        p.product || "---",
+        `${(p.quantity || 0).toLocaleString()} L`,
         `Rs. ${(p.totalCost || 0).toLocaleString()}`,
-        p.paymentStatus,
+        p.paymentStatus || "---",
       ]);
     } else if (reportType === "LEDGER") {
-      columns = ["Date", "Description", "Debit", "Credit", "Balance"];
+      columns = ["Date", "Description", "Debit", "Credit", "Running Balance"];
       tableData = data.ledger.map((r: any) => [
-        new Date(r.date).toLocaleDateString(),
-        r.description,
-        r.debit > 0 ? (r.debit || 0).toLocaleString() : "-",
-        r.credit > 0 ? (r.credit || 0).toLocaleString() : "-",
-        r.runningBalance?.toLocaleString() ||
-          r.balance?.toLocaleString() ||
-          "-",
+        formatDate(r.date),
+        r.description || "---",
+        r.debit > 0 ? `Rs. ${r.debit.toLocaleString()}` : "-",
+        r.credit > 0 ? `Rs. ${r.credit.toLocaleString()}` : "-",
+        `Rs. ${(r.runningBalance || r.balance || 0).toLocaleString()}`,
       ]);
     } else if (reportType === "PL") {
       columns = ["Description", "Amount (Rs.)"];
       tableData = [
-        ["Total Income", (data.income || 0).toLocaleString()],
-        ["Total Expenses", (data.expense || 0).toLocaleString()],
-        ["Net Profit / Loss", (data.netProfit || 0).toLocaleString()],
+        ["Total Income", `Rs. ${(data.income || 0).toLocaleString()}`],
+        ["Total Expenses", `Rs. ${(data.expense || 0).toLocaleString()}`],
+        ["Net Profit / Loss", `Rs. ${(data.netProfit || 0).toLocaleString()}`],
       ];
     } else if (reportType === "BS") {
       columns = ["Category", "Total (Rs.)"];
       tableData = [
-        ["Total Assets", (data.totalAssets || 0).toLocaleString()],
+        ["Total Assets", `Rs. ${(data.totalAssets || 0).toLocaleString()}`],
         [
           "Total Liabilities & Equity",
-          (data.totalLiabilitiesAndEquity || 0).toLocaleString(),
+          `Rs. ${(data.totalLiabilitiesAndEquity || 0).toLocaleString()}`,
         ],
       ];
     } else if (reportType === "TRIAL") {
@@ -334,14 +361,14 @@ export default function ReportsPage() {
       tableData = data.accounts.map((acc: any) => [
         acc.code,
         acc.name,
-        acc.debit > 0 ? (acc.debit || 0).toLocaleString() : "-",
-        acc.credit > 0 ? (acc.credit || 0).toLocaleString() : "-",
+        acc.debit > 0 ? `Rs. ${acc.debit.toLocaleString()}` : "-",
+        acc.credit > 0 ? `Rs. ${acc.credit.toLocaleString()}` : "-",
       ]);
       tableData.push([
         "",
         "TOTALS",
-        (data.totalDebit || 0).toLocaleString(),
-        (data.totalCredit || 0).toLocaleString(),
+        `Rs. ${(data.totalDebit || 0).toLocaleString()}`,
+        `Rs. ${(data.totalCredit || 0).toLocaleString()}`,
       ]);
     }
 
@@ -349,8 +376,23 @@ export default function ReportsPage() {
       head: [columns],
       body: tableData,
       startY: 45,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillStyle: "F" as any, fillColor: [40, 40, 40] },
+      styles: { fontSize: 8, cellPadding: 4, font: "helvetica" },
+      headStyles: {
+        fillColor: [24, 24, 27],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        halign: "center",
+      },
+      alternateRowStyles: { fillColor: [250, 250, 250] },
+      margin: { top: 45 },
+      didDrawPage: (data) => {
+        // Footer on each page
+        const str =
+          "PPMS Secure Report | Page " + doc.internal.getNumberOfPages();
+        doc.setFontSize(7);
+        doc.setTextColor(150);
+        doc.text(str, 105, 285, { align: "center" });
+      },
     });
 
     doc.save(`${title.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`);
@@ -1383,95 +1425,101 @@ export default function ReportsPage() {
                 {/* Grouped Accounts */}
                 {data.grouped &&
                   Object.entries(data.grouped).map(
-                    ([type, accounts]: [string, unknown]) => {
+                    ([type, accounts]: [string, any]) => {
                       const accountsArray = accounts as any[];
-                      return accountsArray.length > 0 && (
-                        <div key={type} className="space-y-3">
-                          <div className="flex items-center gap-3 px-2">
-                            <div
-                              className={cn(
-                                "w-1.5 h-6 rounded-full",
-                                type === "ASSET"
-                                  ? "bg-blue-500"
-                                  : type === "LIABILITY"
-                                    ? "bg-orange-500"
-                                    : type === "EQUITY"
-                                      ? "bg-purple-500"
-                                      : type === "INCOME"
-                                        ? "bg-emerald-500"
-                                        : "bg-rose-500",
-                              )}
-                            />
-                            <h3 className="text-lg font-black text-zinc-100 tracking-tight uppercase">
-                              {type}S
-                            </h3>
-                            <span className="text-xs text-zinc-600">
-                              ({accounts.length} accounts)
-                            </span>
-                          </div>
+                      return (
+                        accountsArray.length > 0 && (
+                          <div key={type} className="space-y-3">
+                            <div className="flex items-center gap-3 px-2">
+                              <div
+                                className={cn(
+                                  "w-1.5 h-6 rounded-full",
+                                  type === "ASSET"
+                                    ? "bg-blue-500"
+                                    : type === "LIABILITY"
+                                      ? "bg-orange-500"
+                                      : type === "EQUITY"
+                                        ? "bg-purple-500"
+                                        : type === "INCOME"
+                                          ? "bg-emerald-500"
+                                          : "bg-rose-500",
+                                )}
+                              />
+                              <h3 className="text-lg font-black text-zinc-100 tracking-tight uppercase">
+                                {type}S
+                              </h3>
+                              <span className="text-xs text-zinc-600">
+                                ({accounts.length} accounts)
+                              </span>
+                            </div>
 
-                          <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                            <table className="w-full text-left text-sm text-zinc-400 border-collapse">
-                              <thead className="bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
-                                <tr>
-                                  <th className="px-6 py-4">Code</th>
-                                  <th className="px-6 py-4">Account Name</th>
-                                  <th className="px-6 py-4 text-right">
-                                    Debit (DR)
-                                  </th>
-                                  <th className="px-6 py-4 text-right">
-                                    Credit (CR)
-                                  </th>
-                                  <th className="px-6 py-4 text-right">
-                                    Balance
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-zinc-900">
-                                {accountsArray.map((acc: any) => (
-                                  <tr
-                                    key={acc.code}
-                                    onClick={() =>
-                                      router.push(
-                                        `/reports?reportType=LEDGER&accountId=${acc.id}`,
-                                      )
-                                    }
-                                    className="group hover:bg-zinc-100/3 transition-all cursor-pointer"
-                                  >
-                                    <td className="px-6 py-4 font-mono text-zinc-500 font-bold tracking-tighter">
-                                      {acc.code}
-                                    </td>
-                                    <td className="px-6 py-4 text-zinc-100 font-bold">
-                                      {acc.name}
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
-                                      {acc.debit > 0 ? (
-                                        <span className="text-blue-400">
-                                          {acc.debit.toLocaleString()}
-                                        </span>
-                                      ) : (
-                                        <span className="text-zinc-800">-</span>
-                                      )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
-                                      {acc.credit > 0 ? (
-                                        <span className="text-emerald-400">
-                                          {acc.credit.toLocaleString()}
-                                        </span>
-                                      ) : (
-                                        <span className="text-zinc-800">-</span>
-                                      )}
-                                    </td>
-                                    <td className="px-6 py-4 text-right font-mono text-zinc-300 font-bold">
-                                      Rs.{" "}
-                                      {Math.abs(acc.balance).toLocaleString()}
-                                    </td>
+                            <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+                              <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                                <thead className="bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                                  <tr>
+                                    <th className="px-6 py-4">Code</th>
+                                    <th className="px-6 py-4">Account Name</th>
+                                    <th className="px-6 py-4 text-right">
+                                      Debit (DR)
+                                    </th>
+                                    <th className="px-6 py-4 text-right">
+                                      Credit (CR)
+                                    </th>
+                                    <th className="px-6 py-4 text-right">
+                                      Balance
+                                    </th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                </thead>
+                                <tbody className="divide-y divide-zinc-900">
+                                  {accountsArray.map((acc: any) => (
+                                    <tr
+                                      key={acc.code}
+                                      onClick={() =>
+                                        router.push(
+                                          `/reports?reportType=LEDGER&accountId=${acc.id}`,
+                                        )
+                                      }
+                                      className="group hover:bg-zinc-100/3 transition-all cursor-pointer"
+                                    >
+                                      <td className="px-6 py-4 font-mono text-zinc-500 font-bold tracking-tighter">
+                                        {acc.code}
+                                      </td>
+                                      <td className="px-6 py-4 text-zinc-100 font-bold">
+                                        {acc.name}
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
+                                        {acc.debit > 0 ? (
+                                          <span className="text-blue-400">
+                                            {acc.debit.toLocaleString()}
+                                          </span>
+                                        ) : (
+                                          <span className="text-zinc-800">
+                                            -
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
+                                        {acc.credit > 0 ? (
+                                          <span className="text-emerald-400">
+                                            {acc.credit.toLocaleString()}
+                                          </span>
+                                        ) : (
+                                          <span className="text-zinc-800">
+                                            -
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 text-right font-mono text-zinc-300 font-bold">
+                                        Rs.{" "}
+                                        {Math.abs(acc.balance).toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           </div>
-                        </div>
+                        )
                       );
                     },
                   )}

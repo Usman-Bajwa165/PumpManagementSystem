@@ -73,16 +73,13 @@ export class ReportsService {
   async getBalanceSheet() {
     const accounts = await this.prisma.account.findMany();
 
-    const tanks = await this.prisma.tank.findMany({
-      include: { product: true },
-    });
-    const fuelInventoryValue = tanks.reduce((sum, t) => {
-      return sum + Number(t.currentStock) * Number(t.product.purchasePrice);
-    }, 0);
-
     const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
-    const liabilityAccounts = accounts.filter((a) => a.type === AccountType.LIABILITY);
-    const equityAccounts = accounts.filter((a) => a.type === AccountType.EQUITY);
+    const liabilityAccounts = accounts.filter(
+      (a) => a.type === AccountType.LIABILITY,
+    );
+    const equityAccounts = accounts.filter(
+      (a) => a.type === AccountType.EQUITY,
+    );
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
@@ -91,11 +88,7 @@ export class ReportsService {
     const equity: Record<string, number> = {};
 
     assetAccounts.forEach((a) => {
-      if (a.code === '10401') {
-        assets[a.name] = fuelInventoryValue;
-      } else {
-        assets[a.name] = Number(a.balance);
-      }
+      assets[a.name] = Number(a.balance);
     });
 
     liabilityAccounts.forEach((a) => {
@@ -107,9 +100,14 @@ export class ReportsService {
     });
 
     const totalAssets = Object.values(assets).reduce((s, v) => s + v, 0);
-    const totalLiabilities = Object.values(liabilities).reduce((s, v) => s + v, 0);
+    const totalLiabilities = Object.values(liabilities).reduce(
+      (s, v) => s + v,
+      0,
+    );
     const totalEquity = Object.values(equity).reduce((s, v) => s + v, 0);
-    const netProfit = income.reduce((sum, a) => sum + Number(a.balance), 0) - expenses.reduce((sum, a) => sum + Number(a.balance), 0);
+    const netProfit =
+      income.reduce((sum, a) => sum + Number(a.balance), 0) -
+      expenses.reduce((sum, a) => sum + Number(a.balance), 0);
 
     return {
       assets,
@@ -120,13 +118,16 @@ export class ReportsService {
       totalEquity,
       totalLiabilitiesAndEquity: totalLiabilities + totalEquity + netProfit,
       netProfit,
-      isBalanced: Math.abs(totalAssets - (totalLiabilities + totalEquity + netProfit)) < 1,
+      isBalanced:
+        Math.abs(totalAssets - (totalLiabilities + totalEquity + netProfit)) <
+        1,
       explanation: {
         assets: 'What the business owns (Cash, Bank, Inventory, Equipment)',
-        liabilities: 'What the business owes (Supplier debts, Customer advances)',
+        liabilities:
+          'What the business owes (Supplier debts, Customer advances)',
         equity: 'Owner investment and retained earnings',
-        formula: 'Assets = Liabilities + Equity + Net Profit'
-      }
+        formula: 'Assets = Liabilities + Equity + Net Profit',
+      },
     };
   }
 
@@ -160,19 +161,19 @@ export class ReportsService {
     switch (mode) {
       case 'DETAILED_SALES':
         return baseData;
-      
+
       case 'DAILY_SUMMARY':
         return this.aggregateDailySummary(baseData.records);
-      
+
       case 'SHIFT_WISE':
         return this.aggregateShiftWise(baseData.records, startDate, endDate);
-      
+
       case 'NOZZLE_WISE':
         return this.aggregateNozzleWise(startDate, endDate, shiftId);
-      
+
       case 'NOZZLE_READINGS':
         return this.getNozzleReadings(startDate, endDate, shiftId, nozzleId);
-      
+
       default:
         return baseData;
     }
@@ -185,7 +186,7 @@ export class ReportsService {
       const date = new Date(r.date);
       date.setHours(0, 0, 0, 0);
       const dateKey = date.toISOString().split('T')[0];
-      
+
       if (!dailyMap.has(dateKey)) {
         dailyMap.set(dateKey, {
           date: date.toISOString(),
@@ -204,12 +205,23 @@ export class ReportsService {
     });
 
     return {
-      summary: { totalCustomers: records.length, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
-      records: Array.from(dailyMap.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+      summary: {
+        totalCustomers: records.length,
+        fuelTypeTotals: [],
+        nozzlewiseTotals: [],
+        paymentMethodTotals: [],
+      },
+      records: Array.from(dailyMap.values()).sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      ),
     };
   }
 
-  private async aggregateShiftWise(records: any[], startDate?: Date, endDate?: Date) {
+  private async aggregateShiftWise(
+    records: any[],
+    startDate?: Date,
+    endDate?: Date,
+  ) {
     const where: any = {};
     if (startDate || endDate) {
       where.startTime = {};
@@ -246,12 +258,21 @@ export class ReportsService {
     });
 
     return {
-      summary: { totalCustomers: records.length, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      summary: {
+        totalCustomers: records.length,
+        fuelTypeTotals: [],
+        nozzlewiseTotals: [],
+        paymentMethodTotals: [],
+      },
       records: shiftRecords,
     };
   }
 
-  private async aggregateNozzleWise(startDate?: Date, endDate?: Date, shiftId?: string) {
+  private async aggregateNozzleWise(
+    startDate?: Date,
+    endDate?: Date,
+    shiftId?: string,
+  ) {
     const where: any = {};
     if (shiftId) where.shiftId = shiftId;
     if (startDate || endDate) {
@@ -282,18 +303,32 @@ export class ReportsService {
       shiftName: this.formatShiftName(r.shift),
       openingReading: Number(r.openingReading),
       closingReading: Number(r.closingReading || r.openingReading),
-      sale: Number(r.closingReading || r.openingReading) - Number(r.openingReading),
+      sale:
+        Number(r.closingReading || r.openingReading) - Number(r.openingReading),
       rate: Number(r.nozzle.tank.product.sellingPrice),
-      totalSale: (Number(r.closingReading || r.openingReading) - Number(r.openingReading)) * Number(r.nozzle.tank.product.sellingPrice),
+      totalSale:
+        (Number(r.closingReading || r.openingReading) -
+          Number(r.openingReading)) *
+        Number(r.nozzle.tank.product.sellingPrice),
     }));
 
     return {
-      summary: { totalCustomers: 0, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      summary: {
+        totalCustomers: 0,
+        fuelTypeTotals: [],
+        nozzlewiseTotals: [],
+        paymentMethodTotals: [],
+      },
       records: nozzleRecords,
     };
   }
 
-  private async getNozzleReadings(startDate?: Date, endDate?: Date, shiftId?: string, nozzleId?: string) {
+  private async getNozzleReadings(
+    startDate?: Date,
+    endDate?: Date,
+    shiftId?: string,
+    nozzleId?: string,
+  ) {
     const where: any = {};
     if (shiftId) where.shiftId = shiftId;
     if (nozzleId) where.nozzleId = nozzleId;
@@ -328,13 +363,22 @@ export class ReportsService {
       product: r.nozzle.tank.product.name,
       openingReading: Number(r.openingReading),
       closingReading: Number(r.closingReading || r.openingReading),
-      sold: Number(r.closingReading || r.openingReading) - Number(r.openingReading),
+      sold:
+        Number(r.closingReading || r.openingReading) - Number(r.openingReading),
       rate: Number(r.nozzle.tank.product.sellingPrice),
-      amount: (Number(r.closingReading || r.openingReading) - Number(r.openingReading)) * Number(r.nozzle.tank.product.sellingPrice),
+      amount:
+        (Number(r.closingReading || r.openingReading) -
+          Number(r.openingReading)) *
+        Number(r.nozzle.tank.product.sellingPrice),
     }));
 
     return {
-      summary: { totalCustomers: 0, fuelTypeTotals: [], nozzlewiseTotals: [], paymentMethodTotals: [] },
+      summary: {
+        totalCustomers: 0,
+        fuelTypeTotals: [],
+        nozzlewiseTotals: [],
+        paymentMethodTotals: [],
+      },
       records,
     };
   }
@@ -448,7 +492,10 @@ export class ReportsService {
       if ((t.debitAccount as any)?.code === '10301') {
         paidTo = 'Account Receivable';
       } else if (t.paymentAccountId) {
-        paidTo = (t.paymentAccount as any)?.name || (t.paymentAccount as any)?.type || 'Bank';
+        paidTo =
+          (t.paymentAccount as any)?.name ||
+          (t.paymentAccount as any)?.type ||
+          'Bank';
       } else {
         paidTo = 'Cash in Hand';
       }
@@ -605,7 +652,9 @@ export class ReportsService {
               runningBalance,
             };
           }),
-        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        ].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+        );
 
         allLedger.push(...sorted);
         totalBalance += Number(supplier.balance);
@@ -751,7 +800,9 @@ export class ReportsService {
               customerName: customer.name,
             };
           }),
-        ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        ].sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+        );
 
         allLedger.push(...sorted);
         totalBalance += Number(customer.totalCredit);
@@ -856,11 +907,11 @@ export class ReportsService {
 
     // Group by type for better organization
     const grouped = {
-      ASSET: trialBalance.filter(a => a.type === 'ASSET'),
-      LIABILITY: trialBalance.filter(a => a.type === 'LIABILITY'),
-      EQUITY: trialBalance.filter(a => a.type === 'EQUITY'),
-      INCOME: trialBalance.filter(a => a.type === 'INCOME'),
-      EXPENSE: trialBalance.filter(a => a.type === 'EXPENSE'),
+      ASSET: trialBalance.filter((a) => a.type === 'ASSET'),
+      LIABILITY: trialBalance.filter((a) => a.type === 'LIABILITY'),
+      EQUITY: trialBalance.filter((a) => a.type === 'EQUITY'),
+      INCOME: trialBalance.filter((a) => a.type === 'INCOME'),
+      EXPENSE: trialBalance.filter((a) => a.type === 'EXPENSE'),
     };
 
     return {
@@ -876,20 +927,23 @@ export class ReportsService {
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
 
-    const incomeBreakdown = income.map(a => ({
+    const incomeBreakdown = income.map((a) => ({
       name: a.name,
       code: a.code,
-      amount: Number(a.balance)
+      amount: Number(a.balance),
     }));
 
-    const expenseBreakdown = expenses.map(a => ({
+    const expenseBreakdown = expenses.map((a) => ({
       name: a.name,
       code: a.code,
-      amount: Number(a.balance)
+      amount: Number(a.balance),
     }));
 
     const totalIncome = income.reduce((sum, a) => sum + Number(a.balance), 0);
-    const totalExpense = expenses.reduce((sum, a) => sum + Number(a.balance), 0);
+    const totalExpense = expenses.reduce(
+      (sum, a) => sum + Number(a.balance),
+      0,
+    );
 
     return {
       income: totalIncome,
@@ -899,9 +953,10 @@ export class ReportsService {
       expenseBreakdown,
       explanation: {
         income: 'Total revenue from fuel sales and other income sources',
-        expense: 'Total costs including fuel purchases, salaries, utilities, etc.',
-        netProfit: 'Income minus Expenses = Net Profit (or Loss if negative)'
-      }
+        expense:
+          'Total costs including fuel purchases, salaries, utilities, etc.',
+        netProfit: 'Income minus Expenses = Net Profit (or Loss if negative)',
+      },
     };
   }
 
@@ -1032,56 +1087,38 @@ export class ReportsService {
     const shift = await this.prisma.shift.findUnique({
       where: { id: shiftId },
       include: {
-        transactions: { include: { creditAccount: true, debitAccount: true } },
+        transactions: {
+          include: {
+            creditAccount: true,
+            debitAccount: true,
+            paymentAccount: true,
+          },
+        },
       },
     });
 
-    if (!shift) return { totalSales: 0, cashSales: 0, creditSales: 0 };
+    if (!shift)
+      return {
+        totalSales: 0,
+        cashSales: 0,
+        creditSales: 0,
+        cardSales: 0,
+        onlineSales: 0,
+      };
 
     const salesTx = shift.transactions.filter(
       (t) => t.description?.includes('Sale') || Number(t.amount) > 0,
     );
-    // Ideally filter by account type INCOME or specific Sales account
 
     const totalSales = salesTx.reduce((s, t) => s + Number(t.amount), 0);
 
-    // Cash Sales: Debit Cash (Asset), Credit Sales (Income).
-    // In our transaction: debitAccount is Cash, creditAccount is Sales.
-    // We can check if creditAccount.name === 'Fuel Sales' mainly.
-    // And payment mode?
-    // Actually, we can check `description` if it says "Cash Sale" vs "Credit Sale" or look at debit account.
-    // If Debit Account is "Cash in Hand", it's Cash Sale.
-    // If Debit Account is "Accounts Receivable", it's Credit Sale.
-
-    // Let's assume we can fetch accounts to check IDs or codes, but for now we look at patterns or just sum everything as total if we can't distinguish easily without more queries.
-    // However, ShiftsService expects breakdown.
-
-    // Simple heuristic based on current implementation:
-    // We might not have easy way to distinguish without account codes.
-    // Let's try to do it right:
-
-    let cashSales = 0;
-    let creditSales = 0;
-
-    for (const t of salesTx) {
-      // We need to know debit account type.
-      // We only included creditAccount.
-      // Let's include debitAccount too in the query above.
-      // Actually, simpler:
-      // If we assume `10101` is Cash ...
-      // We need to wait for the include to be updated.
-    }
-
-    // Re-fetching with correct include
-    // The previous fetch already includes both debitAccount and creditAccount.
-    // So we can use `shift.transactions` directly.
     const txs = shift.transactions || [];
 
-    cashSales = txs
+    const cashSales = txs
       .filter((t) => t.debitAccount?.code === '10101') // Cash in Hand
       .reduce((s, t) => s + Number(t.amount), 0);
 
-    creditSales = txs
+    const creditSales = txs
       .filter(
         (t) =>
           t.debitAccount?.code === '10301' ||
@@ -1089,6 +1126,14 @@ export class ReportsService {
       )
       .reduce((s, t) => s + Number(t.amount), 0);
 
-    return { totalSales, cashSales, creditSales };
+    const cardSales = txs
+      .filter((t) => t.paymentAccount?.type === 'CARD')
+      .reduce((s, t) => s + Number(t.amount), 0);
+
+    const onlineSales = txs
+      .filter((t) => t.paymentAccount?.type === 'ONLINE')
+      .reduce((s, t) => s + Number(t.amount), 0);
+
+    return { totalSales, cashSales, creditSales, cardSales, onlineSales };
   }
 }

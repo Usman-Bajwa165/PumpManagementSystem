@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import { Client, LocalAuth, MessageMedia } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode-terminal';
 import { PrismaService } from '../prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
@@ -77,7 +77,9 @@ export class WhatsappService implements OnModuleInit {
               where: { id: prefs.id },
               data: { phoneNumber },
             });
-            this.logger.log(`NotificationPreferences phone number updated to ${phoneNumber}`);
+            this.logger.log(
+              `NotificationPreferences phone number updated to ${phoneNumber}`,
+            );
           }
         }
       } catch (err) {
@@ -97,7 +99,8 @@ export class WhatsappService implements OnModuleInit {
     });
 
     this.client.initialize().catch((err) => {
-      this.logger.error('Failed to initialize WhatsApp client: ' + err.message);
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error('Failed to initialize WhatsApp client: ' + msg);
       this.authStatus = 'failed';
     });
   }
@@ -123,6 +126,24 @@ export class WhatsappService implements OnModuleInit {
     } catch (err: any) {
       this.logger.error(`Failed to send message to ${to}: ${err.message}`);
       await this.queueMessage(to, message);
+      return false;
+    }
+  }
+
+  async sendFile(to: string, filePath: string, caption?: string) {
+    if (!this.isReady) {
+      this.logger.warn('WhatsApp client not ready. Cannot send file.');
+      return false;
+    }
+
+    try {
+      const media = MessageMedia.fromFilePath(filePath);
+      const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
+      await this.client.sendMessage(chatId, media, { caption });
+      this.logger.log(`File sent to ${to}: ${filePath}`);
+      return true;
+    } catch (err: any) {
+      this.logger.error(`Failed to send file to ${to}: ${err.message}`);
       return false;
     }
   }
@@ -189,7 +210,7 @@ export class WhatsappService implements OnModuleInit {
   }
 
   async notifyShiftEnd(to: string, summary: any) {
-    const msg = `🏁 *Shift Closed* 🏁\nShift ID: ${summary.shiftId}\nTotal Sales: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCredit: Rs. ${summary.creditSales}\nTime: ${new Date().toLocaleString()}`;
+    const msg = `🏁 *Shift Closed* 🏁\nShift ID: ${summary.shiftId}\nTotal Sales: Rs. ${summary.totalSales}\nCash: Rs. ${summary.cashSales}\nCard: Rs. ${summary.cardSales}\nOnline: Rs. ${summary.onlineSales}\nCredit: Rs. ${summary.creditSales}\nTime: ${new Date().toLocaleString()}`;
     return this.sendMessage(to, msg);
   }
 
@@ -256,6 +277,7 @@ export class WhatsappService implements OnModuleInit {
       amount: number;
       available: number;
       tank: string;
+      method?: string;
     },
   ) {
     const now = new Date();
@@ -272,7 +294,9 @@ export class WhatsappService implements OnModuleInit {
       timeZone: 'Asia/Karachi',
     });
 
-    const msg = `📦 *Stock ${data.action}* 📦\n${data.action} By: ${data.user}\nQuantity: ${data.quantity}L\nAmount: Rs. ${data.amount}\nNow Available: ${data.available}L\nTank: ${data.tank}\nOn: ${dateStr} ${timeStr}`;
+    let msg = `📦 *Stock ${data.action}* 📦\n${data.action} By: ${data.user}\nQuantity: ${data.quantity}L\nAmount: Rs. ${data.amount}\nNow Available: ${data.available}L\nTank: ${data.tank}`;
+    if (data.method) msg += `\nStatus: ${data.method}`;
+    msg += `\nOn: ${dateStr} ${timeStr}`;
     return this.sendMessage(to, msg);
   }
 

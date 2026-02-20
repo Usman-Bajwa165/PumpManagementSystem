@@ -153,14 +153,32 @@ export class AccountingService implements OnModuleInit {
       return sum + stock * price;
     }, 0);
 
-    await this.prisma.account.update({
-      where: { id: fuelInventoryAccount.id },
-      data: { balance: totalInventoryValue },
-    });
+    const currentLedgerBalance = Number(fuelInventoryAccount.balance);
+    const discrepancy = totalInventoryValue - currentLedgerBalance;
+
+    if (Math.abs(discrepancy) < 0.01) return;
+
+    if (discrepancy > 0) {
+      await this.createTransaction({
+        debitCode: '10401',
+        creditCode: '30101',
+        amount: discrepancy,
+        description: 'Inventory Valuation Adjustment (Equity)',
+      });
+    } else {
+      // If discrepancy is negative (Physical < Ledger), it's likely a loss or shrinkage.
+      // Nature: Debit Stock Loss (50301), Credit Inventory (10401)
+      await this.createTransaction({
+        debitCode: '50301',
+        creditCode: '10401',
+        amount: Math.abs(discrepancy),
+        description: 'Inventory Valuation Adjustment (Shrinkage)',
+      });
+    }
 
     this.logger.logBusinessOperation(
       'SYNC_INVENTORY_BALANCE',
-      `Value: Rs. ${totalInventoryValue.toLocaleString()}`,
+      `Adjusted by Rs. ${discrepancy.toLocaleString()}. New Value: Rs. ${totalInventoryValue.toLocaleString()}`,
       'SYSTEM',
     );
   }

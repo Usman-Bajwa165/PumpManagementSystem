@@ -171,6 +171,23 @@ export class SalesService {
         quantity: dto.quantity,
       });
 
+      // Record Cost of Goods Sold (COGS) to reduce Inventory ledger instantly
+      // Debit: 50201 (Cost of Goods Sold - Expense)
+      // Credit: 10401 (Fuel Inventory - Asset)
+      const costAmount =
+        Number(nozzle.tank.product.purchasePrice) * dto.quantity;
+      if (costAmount > 0) {
+        await this.accountingService.createTransaction({
+          debitCode: '50201',
+          creditCode: '10401',
+          amount: costAmount,
+          description: `COGS: ${dto.quantity}L ${nozzle.tank.product.name}`,
+          shiftId: shift.id,
+          productId: nozzle.tank.productId,
+          quantity: dto.quantity,
+        });
+      }
+
       this.logger.logBusinessOperation(
         'SALE_RECORDED',
         `${nozzle.name}: ${dto.quantity}L @ Rs. ${dto.amount} - ${dto.paymentMethod}`,
@@ -321,6 +338,23 @@ export class SalesService {
         userId,
         true,
       );
+
+      // WhatsApp Notification
+      try {
+        const prefs = await this.prisma.notificationPreferences.findFirst();
+        if (prefs && prefs.salesNotifications) {
+          await this.whatsappService.notifyCashPayment(prefs.phoneNumber, {
+            customer: dto.customerName,
+            amount: dto.amount,
+            method: 'CASH (Credit Clearance)',
+          });
+        }
+      } catch (err) {
+        this.logger.error(
+          'Failed to send credit clear notification',
+          (err as Error).message,
+        );
+      }
 
       return { success: true };
     } catch (error: any) {

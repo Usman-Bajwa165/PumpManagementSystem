@@ -90,7 +90,7 @@ export class InventoryService {
       });
 
       // 2. Create Purchase Record
-      const purchase = await tx.purchase.create({
+      await tx.purchase.create({
         data: {
           tankId: dto.tankId,
           supplierId: dto.supplierId!, // Assert non-null since we checked
@@ -179,7 +179,8 @@ export class InventoryService {
           amount: dto.cost,
           available: newStock,
           tank: tank.name,
-        })
+          method: dto.paymentStatus,
+        } as any)
         .catch(() => {});
     }
   }
@@ -224,22 +225,33 @@ export class InventoryService {
 
     // Accounting for Variance
     const price = Number(tank.product?.purchasePrice || 0);
-    const varianceAmount = Math.abs(variance) * price;
 
-    if (variance < 0) {
-      // Shortage (Loss)
+    // If manual loss is provided, we use it for the loss transaction.
+    // Otherwise, we use the absolute variance if it's a shortage.
+    const manualLoss =
+      dto.loss !== undefined && dto.loss !== null ? dto.loss : null;
+    const lossAmountLiters =
+      manualLoss !== null ? manualLoss : variance < 0 ? Math.abs(variance) : 0;
+    const varianceAmount = lossAmountLiters * price;
+
+    if (lossAmountLiters > 0) {
+      // Record Stock Loss (Shortage)
       await this.accountingService.createTransaction({
         debitCode: '50301', // Stock Loss
         creditCode: '10401', // Fuel Inventory
         amount: varianceAmount,
-        description: `Stock Shortage adjustment: ${variance}L`,
+        description: `Stock Loss adjustment: ${lossAmountLiters}L${manualLoss !== null ? ' (Manual)' : ''}`,
       });
-    } else {
-      // Excess (Gain)
+    }
+
+    // Handle Excess separately if variance is positive and NOT covered by manual loss
+    // (Usually, if there's an excess, loss would be 0, but we keep the gain logic just in case)
+    if (variance > 0 && manualLoss === null) {
+      const excessAmount = variance * price;
       await this.accountingService.createTransaction({
         debitCode: '10401', // Fuel Inventory
         creditCode: '40201', // Stock Gain
-        amount: varianceAmount,
+        amount: excessAmount,
         description: `Stock Excess adjustment: ${variance}L`,
       });
     }
