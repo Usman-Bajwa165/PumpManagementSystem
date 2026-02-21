@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "predev": "npx kill-port 3000 3001",
+    "predev": "node scripts/kill-ports.js",
     "dev": "node scripts/dev.js",
     "build": "npm run build --workspaces",
     "start": "pm2 start ecosystem.config.js",
