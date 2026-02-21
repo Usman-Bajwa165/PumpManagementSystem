@@ -220,7 +220,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-zinc-500">Last 7 days performance</p>
               </div>
               <div className="px-4 py-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50 text-xs font-mono text-zinc-400">
-                PKR (Thousands)
+                PKR
               </div>
             </div>
 

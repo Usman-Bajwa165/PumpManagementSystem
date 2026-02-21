@@ -36,55 +36,57 @@ export class WhatsappService implements OnModuleInit {
       this.authStatus = 'pending';
     });
 
-    this.client.on('ready', async () => {
+    this.client.on('ready', () => {
       this.logger.log('WhatsApp Client is ready!');
       this.isReady = true;
       this.authStatus = 'ready';
       this.qrCode = null;
 
       // Get connected phone number
-      try {
-        const info = await this.client.info;
-        const phoneNumber = info.wid.user; // Phone number without @c.us
-        this.logger.log(`Connected WhatsApp number: ${phoneNumber}`);
+      void (async () => {
+        try {
+          const info = this.client.info;
+          const phoneNumber = info.wid.user; // Phone number without @c.us
+          this.logger.log(`Connected WhatsApp number: ${phoneNumber}`);
 
-        // Always update/create preferences when WhatsApp connects
-        const prefs = await this.prisma.notificationPreferences.findFirst();
-        if (!prefs) {
-          await this.prisma.notificationPreferences.create({
-            data: {
-              phoneNumber,
-              salesNotifications: true,
-              shiftNotifications: true,
-              inventoryNotifications: true,
-              stockNotifications: true,
-              notifyCash: true,
-              notifyCard: true,
-              notifyOnline: true,
-              notifyCredit: true,
-              minCashAmount: 0,
-              minCardAmount: 0,
-              minOnlineAmount: 0,
-              minCreditAmount: 0,
-              autoCloseShift: false,
-            },
-          });
-          this.logger.log('NotificationPreferences created');
-        } else {
-          // Update phone number if changed
-          if (prefs.phoneNumber !== phoneNumber) {
-            await this.prisma.notificationPreferences.update({
-              where: { id: prefs.id },
-              data: { phoneNumber },
+          // Always update/create preferences when WhatsApp connects
+          const prefs = await this.prisma.notificationPreferences.findFirst();
+          if (!prefs) {
+            await this.prisma.notificationPreferences.create({
+              data: {
+                phoneNumber,
+                salesNotifications: true,
+                shiftNotifications: true,
+                inventoryNotifications: true,
+                stockNotifications: true,
+                notifyCash: true,
+                notifyCard: true,
+                notifyOnline: true,
+                notifyCredit: true,
+                minCashAmount: 0,
+                minCardAmount: 0,
+                minOnlineAmount: 0,
+                minCreditAmount: 0,
+                autoCloseShift: false,
+              },
             });
-            this.logger.log(
-              `NotificationPreferences phone number updated to ${phoneNumber}`,
-            );
+            this.logger.log('NotificationPreferences created');
+          } else {
+            // Update phone number if changed
+            if (prefs.phoneNumber !== phoneNumber) {
+              await this.prisma.notificationPreferences.update({
+                where: { id: prefs.id },
+                data: { phoneNumber },
+              });
+              this.logger.log(
+                `NotificationPreferences phone number updated to ${phoneNumber}`,
+              );
+            }
           }
+        } catch (err) {
+          this.logger.error('Failed to get WhatsApp info: ' + err);
         }
-      } catch (err) {
-        this.logger.error('Failed to get WhatsApp info: ' + err);
-      }
+      })();
     });
 
     this.client.on('authenticated', () => {
@@ -247,7 +249,7 @@ export class WhatsappService implements OnModuleInit {
   async getConnectedNumber(): Promise<string | null> {
     if (!this.isReady) return null;
     try {
-      const info = await this.client.info;
+      const info = this.client.info;
       return info.wid.user;
     } catch (err) {
       return null;

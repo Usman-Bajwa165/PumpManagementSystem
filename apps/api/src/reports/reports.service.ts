@@ -193,6 +193,8 @@ export class ReportsService {
           quantitySold: 0,
           cashSales: 0,
           creditSales: 0,
+          cardSales: 0,
+          onlineSales: 0,
           totalSales: 0,
           profit: 0,
         });
@@ -201,7 +203,9 @@ export class ReportsService {
       day.quantitySold += r.quantity;
       day.totalSales += r.amount;
       if (r.method === 'CASH') day.cashSales += r.amount;
-      if (r.method === 'CREDIT') day.creditSales += r.amount;
+      else if (r.method === 'CREDIT') day.creditSales += r.amount;
+      else if (r.method === 'CARD') day.cardSales += r.amount;
+      else if (r.method === 'ONLINE') day.onlineSales += r.amount;
     });
 
     return {
@@ -391,21 +395,22 @@ export class ReportsService {
     productId?: string,
     paymentType?: string,
   ) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     const where: any = {
       creditAccount: { code: '40101' }, // Fuel Sales
     };
 
-    if (startDate || endDate) {
+    if (startDate || adjustedEnd) {
       where.createdAt = {};
       if (startDate) {
         const start = new Date(startDate);
         start.setHours(0, 0, 0, 0);
         where.createdAt.gte = start;
       }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        where.createdAt.lte = end;
+      if (adjustedEnd) {
+        where.createdAt.lte = adjustedEnd;
       }
     }
 
@@ -541,12 +546,15 @@ export class ReportsService {
     paymentStatus?: string,
     productId?: string,
   ) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     const where: any = {};
 
-    if (startDate || endDate) {
+    if (startDate || adjustedEnd) {
       where.date = {};
       if (startDate) where.date.gte = startDate;
-      if (endDate) where.date.lte = endDate;
+      if (adjustedEnd) where.date.lte = adjustedEnd;
     }
 
     if (supplierId) {
@@ -597,16 +605,39 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
   ) {
+    // Adjust endDate to end of day if provided
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     if (supplierId === 'ALL') {
       const suppliers = await this.prisma.supplier.findMany();
       const allLedger: any[] = [];
+      const summary: any[] = [];
       let totalBalance = 0;
 
       for (const supplier of suppliers) {
+        // Calculate Opening Balance (everything before startDate)
+        let runningBalance = 0;
+        let totalSupplierDebit = 0;
+        let totalSupplierCredit = 0;
+        if (startDate) {
+          const pastPurchases = await this.prisma.purchase.aggregate({
+            where: { supplierId: supplier.id, date: { lt: startDate } },
+            _sum: { totalCost: true },
+          });
+          const pastPayments = await this.prisma.transaction.aggregate({
+            where: { supplierId: supplier.id, createdAt: { lt: startDate } },
+            _sum: { amount: true },
+          });
+          runningBalance =
+            Number(pastPurchases._sum.totalCost || 0) -
+            Number(pastPayments._sum.amount || 0);
+        }
+
         const purchases = await this.prisma.purchase.findMany({
           where: {
             supplierId: supplier.id,
-            date: { gte: startDate, lte: endDate },
+            date: { gte: startDate, lte: adjustedEnd },
           },
           include: { tank: { include: { product: true } } },
         });
@@ -614,23 +645,22 @@ export class ReportsService {
         const transactions = await this.prisma.transaction.findMany({
           where: {
             supplierId: supplier.id,
-            createdAt: { gte: startDate, lte: endDate },
+            createdAt: { gte: startDate, lte: adjustedEnd },
           },
           include: { debitAccount: true, creditAccount: true },
         });
 
-        let runningBalance = 0;
         const sorted = [
           ...purchases.map((p: any) => {
-            runningBalance += Number(p.totalCost);
+            totalSupplierCredit += Number(p.totalCost);
             return {
               date: p.date,
               type: 'PURCHASE',
               description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
               debit: 0,
               credit: Number(p.totalCost),
-              runningBalance,
               refId: p.id,
+              supplierName: supplier.name,
               details: {
                 quantity: Number(p.quantity),
                 rate: Number(p.rate),
@@ -642,28 +672,45 @@ export class ReportsService {
             };
           }),
           ...transactions.map((t) => {
-            runningBalance -= Number(t.amount);
+            totalSupplierDebit += Number(t.amount);
             return {
               date: t.createdAt,
               type: 'PAYMENT',
-              description: `${t.description} (${supplier.name})`,
+              description: t.description || `Payment to ${supplier.name}`,
               debit: Number(t.amount),
               credit: 0,
-              runningBalance,
+              refId: t.id,
+              supplierName: supplier.name,
             };
           }),
         ].sort(
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
 
-        allLedger.push(...sorted);
+        // Apply running balance to sorted records
+        const recordsWithBalance = sorted.map((r) => {
+          if (r.type === 'PURCHASE') runningBalance += r.credit;
+          else runningBalance -= r.debit;
+          return { ...r, runningBalance };
+        });
+
+        allLedger.push(...recordsWithBalance);
         totalBalance += Number(supplier.balance);
+
+        summary.push({
+          id: supplier.id,
+          name: supplier.name,
+          debit: totalSupplierDebit,
+          credit: totalSupplierCredit,
+          balance: Number(supplier.balance),
+        });
       }
 
       return {
         supplier: { name: 'All Suppliers' },
         ledger: allLedger,
-        closingBalance: totalBalance,
+        summary,
+        currentBalance: totalBalance,
       };
     }
 
@@ -672,65 +719,76 @@ export class ReportsService {
     });
     if (!supplier) throw new Error('Supplier not found');
 
+    // Calculate Opening Balance
+    let runningBalance = 0;
+    if (startDate) {
+      const pastPurchases = await this.prisma.purchase.aggregate({
+        where: { supplierId, date: { lt: startDate } },
+        _sum: { totalCost: true },
+      });
+      const pastPayments = await this.prisma.transaction.aggregate({
+        where: { supplierId, createdAt: { lt: startDate } },
+        _sum: { amount: true },
+      });
+      runningBalance =
+        Number(pastPurchases._sum.totalCost || 0) -
+        Number(pastPayments._sum.amount || 0);
+    }
+
     const purchases = await this.prisma.purchase.findMany({
       where: {
         supplierId,
-        date: { gte: startDate, lte: endDate },
+        date: { gte: startDate, lte: adjustedEnd },
       },
-      include: {
-        supplier: true,
-        tank: { include: { product: true } },
-      },
+      include: { tank: { include: { product: true } } },
     });
 
     const transactions = await this.prisma.transaction.findMany({
       where: {
         supplierId,
-        createdAt: { gte: startDate, lte: endDate },
+        createdAt: { gte: startDate, lte: adjustedEnd },
       },
-      include: { debitAccount: true, creditAccount: true },
     });
 
-    let runningBalance = 0;
-    const ledger = [
-      ...purchases.map((p) => {
-        const totalCost = Number(p.totalCost);
-        runningBalance += totalCost;
-        return {
-          date: p.date,
-          type: 'PURCHASE',
-          description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
-          debit: 0,
-          credit: totalCost,
-          runningBalance,
-          refId: p.id,
-          details: {
-            quantity: Number(p.quantity),
-            rate: Number(p.rate),
-            totalCost,
-            paidAmount: Number(p.paidAmount || 0),
-            remainingAmount: totalCost - Number(p.paidAmount || 0),
-            status: p.status,
-          },
-        };
-      }),
-      ...transactions.map((t) => {
-        runningBalance -= Number(t.amount);
-        return {
-          date: t.createdAt,
-          type: 'PAYMENT',
-          description: t.description,
-          debit: Number(t.amount),
-          credit: 0,
-          runningBalance,
-        };
-      }),
+    const sorted = [
+      ...purchases.map((p: any) => ({
+        date: p.date,
+        type: 'PURCHASE',
+        description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
+        debit: 0,
+        credit: Number(p.totalCost),
+        refId: p.id,
+        supplierName: supplier.name,
+        details: {
+          quantity: Number(p.quantity),
+          rate: Number(p.rate),
+          totalCost: Number(p.totalCost),
+          paidAmount: Number(p.paidAmount),
+          remainingAmount: Number(p.totalCost) - Number(p.paidAmount),
+          status: p.status,
+        },
+      })),
+      ...transactions.map((t) => ({
+        date: t.createdAt,
+        type: 'PAYMENT',
+        description: t.description || `Payment to ${supplier.name}`,
+        debit: Number(t.amount),
+        credit: 0,
+        refId: t.id,
+        supplierName: supplier.name,
+      })),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const ledger = sorted.map((r) => {
+      if (r.type === 'PURCHASE') runningBalance += r.credit;
+      else runningBalance -= r.debit;
+      return { ...r, runningBalance };
+    });
 
     return {
       supplier,
       ledger,
-      closingBalance: Number(supplier.balance),
+      currentBalance: Number(supplier.balance),
     };
   }
 
@@ -739,18 +797,52 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
   ) {
+    // Adjust endDate to end of day if provided
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     if (customerId === 'ALL') {
       const customers = await this.prisma.creditCustomer.findMany();
       const allLedger: any[] = [];
+      const summary: any[] = [];
       let totalBalance = 0;
 
       for (const customer of customers) {
+        // Calculate Opening Balance
+        let runningBalance = 0;
+        let totalCustomerDebit = 0;
+        let totalCustomerCredit = 0;
+
+        if (startDate) {
+          const pastSales = await this.prisma.transaction.aggregate({
+            where: {
+              customerId: customer.id,
+              creditAccount: { code: '40101' },
+              debitAccount: { code: '10301' },
+              createdAt: { lt: startDate },
+            },
+            _sum: { amount: true },
+          });
+          const pastPayments = await this.prisma.transaction.aggregate({
+            where: {
+              customerId: customer.id,
+              creditAccount: { code: '10301' },
+              debitAccount: { code: { not: '10301' } },
+              createdAt: { lt: startDate },
+            },
+            _sum: { amount: true },
+          });
+          runningBalance =
+            Number(pastSales._sum.amount || 0) -
+            Number(pastPayments._sum.amount || 0);
+        }
+
         const creditTransactions = await this.prisma.transaction.findMany({
           where: {
             customerId: customer.id,
             creditAccount: { code: '40101' },
             debitAccount: { code: '10301' },
-            createdAt: { gte: startDate, lte: endDate },
+            createdAt: { gte: startDate, lte: adjustedEnd },
           },
           include: { product: true, nozzle: true, shift: true },
         });
@@ -760,21 +852,19 @@ export class ReportsService {
             customerId: customer.id,
             creditAccount: { code: '10301' },
             debitAccount: { code: { not: '10301' } },
-            createdAt: { gte: startDate, lte: endDate },
+            createdAt: { gte: startDate, lte: adjustedEnd },
           },
         });
 
-        let runningBalance = 0;
         const sorted = [
           ...creditTransactions.map((t: any) => {
-            runningBalance += Number(t.amount);
+            totalCustomerDebit += Number(t.amount);
             return {
               date: t.createdAt,
               type: 'CREDIT_SALE',
               description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
               debit: Number(t.amount),
               credit: 0,
-              runningBalance,
               refId: t.id,
               customerName: customer.name,
               details: {
@@ -788,14 +878,13 @@ export class ReportsService {
             };
           }),
           ...payments.map((p) => {
-            runningBalance -= Number(p.amount);
+            totalCustomerCredit += Number(p.amount);
             return {
               date: p.createdAt,
               type: 'PAYMENT',
               description: `Payment received - ${p.description || 'Credit payment'}`,
               debit: 0,
               credit: Number(p.amount),
-              runningBalance,
               refId: p.id,
               customerName: customer.name,
             };
@@ -804,13 +893,28 @@ export class ReportsService {
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
 
-        allLedger.push(...sorted);
+        const recordsWithBalance = sorted.map((r) => {
+          if (r.type === 'CREDIT_SALE') runningBalance += r.debit;
+          else runningBalance -= r.credit;
+          return { ...r, runningBalance };
+        });
+
+        allLedger.push(...recordsWithBalance);
         totalBalance += Number(customer.totalCredit);
+
+        summary.push({
+          id: customer.id,
+          name: customer.name,
+          debit: totalCustomerDebit,
+          credit: totalCustomerCredit,
+          balance: Number(customer.totalCredit),
+        });
       }
 
       return {
         customer: { name: 'All Customers' },
         ledger: allLedger,
+        summary,
         currentBalance: totalBalance,
       };
     }
@@ -820,12 +924,38 @@ export class ReportsService {
     });
     if (!customer) throw new Error('Customer not found');
 
+    // Calculate Opening Balance
+    let runningBalance = 0;
+    if (startDate) {
+      const pastSales = await this.prisma.transaction.aggregate({
+        where: {
+          customerId,
+          creditAccount: { code: '40101' },
+          debitAccount: { code: '10301' },
+          createdAt: { lt: startDate },
+        },
+        _sum: { amount: true },
+      });
+      const pastPayments = await this.prisma.transaction.aggregate({
+        where: {
+          customerId,
+          creditAccount: { code: '10301' },
+          debitAccount: { code: { not: '10301' } },
+          createdAt: { lt: startDate },
+        },
+        _sum: { amount: true },
+      });
+      runningBalance =
+        Number(pastSales._sum.amount || 0) -
+        Number(pastPayments._sum.amount || 0);
+    }
+
     const creditTransactions = await this.prisma.transaction.findMany({
       where: {
         customerId,
         creditAccount: { code: '40101' },
         debitAccount: { code: '10301' },
-        createdAt: { gte: startDate, lte: endDate },
+        createdAt: { gte: startDate, lte: adjustedEnd },
       },
       include: { product: true, nozzle: true, shift: true },
     });
@@ -835,45 +965,44 @@ export class ReportsService {
         customerId,
         creditAccount: { code: '10301' },
         debitAccount: { code: { not: '10301' } },
-        createdAt: { gte: startDate, lte: endDate },
+        createdAt: { gte: startDate, lte: adjustedEnd },
       },
     });
 
-    let runningBalance = 0;
-    const ledger = [
-      ...creditTransactions.map((t: any) => {
-        runningBalance += Number(t.amount);
-        return {
-          date: t.createdAt,
-          type: 'CREDIT_SALE',
-          description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
-          debit: Number(t.amount),
-          credit: 0,
-          runningBalance,
-          refId: t.id,
-          details: {
-            quantity: Number(t.quantity || 0),
-            product: t.product?.name,
-            nozzle: t.nozzle?.name,
-            vehicleNumber: customer.vehicleNumber || '',
-            shift: t.shift ? this.formatShiftName(t.shift) : 'Unknown',
-            time: this.formatTime(t.createdAt),
-          },
-        };
-      }),
-      ...payments.map((p: any) => {
-        runningBalance -= Number(p.amount);
-        return {
-          date: p.createdAt,
-          type: 'PAYMENT',
-          description: `Payment received - ${p.description || 'Credit payment'}`,
-          debit: 0,
-          credit: Number(p.amount),
-          runningBalance,
-          refId: p.id,
-        };
-      }),
+    const sorted = [
+      ...creditTransactions.map((t: any) => ({
+        date: t.createdAt,
+        type: 'CREDIT_SALE',
+        description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
+        debit: Number(t.amount),
+        credit: 0,
+        refId: t.id,
+        customerName: customer.name,
+        details: {
+          quantity: Number(t.quantity || 0),
+          product: t.product?.name,
+          nozzle: t.nozzle?.name,
+          vehicleNumber: customer.vehicleNumber || '',
+          shift: t.shift ? this.formatShiftName(t.shift) : 'Unknown',
+          time: this.formatTime(t.createdAt),
+        },
+      })),
+      ...payments.map((p: any) => ({
+        date: p.createdAt,
+        type: 'PAYMENT',
+        description: `Payment received - ${p.description || 'Credit payment'}`,
+        debit: 0,
+        credit: Number(p.amount),
+        refId: p.id,
+        customerName: customer.name,
+      })),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    const ledger = sorted.map((r) => {
+      if (r.type === 'CREDIT_SALE') runningBalance += r.debit;
+      else runningBalance -= r.credit;
+      return { ...r, runningBalance };
+    });
 
     return {
       customer,
@@ -923,6 +1052,9 @@ export class ReportsService {
     };
   }
   async getProfitLoss(startDate?: Date, endDate?: Date) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     const accounts = await this.prisma.account.findMany();
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
@@ -971,29 +1103,36 @@ export class ReportsService {
       where: { status: 'OPEN' },
     });
 
-    // 2. Today's Sales & Credit Sales
-    const todaysShifts = await this.prisma.shift.findMany({
-      where: { startTime: { gte: today, lt: tomorrow } },
-      include: { transactions: { include: { debitAccount: true } } },
-    });
+    const todayFuelSaleTx = (await this.prisma.transaction.findMany({
+      where: {
+        creditAccount: { code: '40101' },
+        createdAt: { gte: today, lt: tomorrow },
+      },
+      include: {
+        debitAccount: true,
+        nozzle: { include: { tank: { include: { product: true } } } },
+      } as any,
+    })) as any[];
 
-    let todaySales = 0;
-    let creditSales = 0;
+    const todaySales = todayFuelSaleTx.reduce(
+      (sum, t) => sum + Number(t.amount),
+      0,
+    );
 
-    for (const s of todaysShifts) {
-      const salesTx = s.transactions.filter(
-        (t) => t.description?.includes('Sale') || Number(t.amount) > 0,
-      );
-      const sales = salesTx.reduce((sum, t) => sum + Number(t.amount), 0);
-      todaySales += sales;
-
-      const creditTx = salesTx.filter(
+    const creditSales = todayFuelSaleTx
+      .filter(
         (t) =>
           t.debitAccount?.code === '10301' ||
           t.debitAccount?.name === 'Accounts Receivable',
-      );
-      creditSales += creditTx.reduce((sum, t) => sum + Number(t.amount), 0);
-    }
+      )
+      .reduce((sum, t) => sum + Number(t.amount), 0);
+
+    const totalCost = todayFuelSaleTx.reduce((sum, t) => {
+      const qty = Number(t.quantity || 0);
+      const purchasePrice = Number(t.nozzle?.tank?.product?.purchasePrice || 0);
+      return sum + qty * purchasePrice;
+    }, 0);
+    const todayProfit = todaySales - totalCost;
 
     // 3. Low Stock Count
     const tanks = await this.prisma.tank.findMany({
@@ -1001,58 +1140,34 @@ export class ReportsService {
     });
     const lowStockCount = tanks.filter((t) => {
       const pct = (Number(t.currentStock) / Number(t.capacity)) * 100;
-      return pct < 20; // Hardcoded 20% or fetch from prefs
+      return pct < 20;
     }).length;
 
-    // 4. Today Profit (Estimate: Sales - COGS)
-    // COGS = Quantity Sold * Purchase Price
-    // We need nozzle readings for quantity sold.
-    const shiftIds = todaysShifts.map((s) => s.id);
-    const readings = await this.prisma.nozzleReading.findMany({
-      where: { shiftId: { in: shiftIds } },
-      include: {
-        nozzle: { include: { tank: { include: { product: true } } } },
-      },
-    });
-
-    let totalCost = 0;
-    for (const r of readings) {
-      const sold = Number(r.closingReading) - Number(r.openingReading);
-      if (sold > 0) {
-        const cost = sold * Number(r.nozzle.tank.product.purchasePrice);
-        totalCost += cost;
-      }
-    }
-
-    const todayProfit = todaySales - totalCost; // Simple Gross Profit
-
-    // 5. Trend Data (Last 7 Days)
+    // 5. Trend Data (Last 7 Days) — sales only, using fuel-sales account filter
     const sevenDaysAgo = new Date(today);
     sevenDaysAgo.setDate(today.getDate() - 7);
 
-    const last7DaysShifts = await this.prisma.shift.findMany({
-      where: { startTime: { gte: sevenDaysAgo, lt: tomorrow } },
-      include: { transactions: true },
-      orderBy: { startTime: 'asc' },
+    const trendTx = await this.prisma.transaction.findMany({
+      where: {
+        creditAccount: { code: '40101' },
+        createdAt: { gte: sevenDaysAgo, lt: tomorrow },
+      },
     });
 
-    // Group by date
+    // Group by local date string (YYYY-MM-DD) to avoid timezone shifts
     const trendMap = new Map<string, number>();
     for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() - (6 - i));
-      const dateKey = d.toISOString().split('T')[0];
+      const dateKey = d.toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD reliably
       trendMap.set(dateKey, 0);
     }
 
-    for (const shift of last7DaysShifts) {
-      const dateKey = new Date(shift.startTime).toISOString().split('T')[0];
-      const salesAmount = shift.transactions
-        .filter((t) => t.description?.includes('Sale') || Number(t.amount) > 0)
-        .reduce((sum, t) => sum + Number(t.amount), 0);
-
+    for (const t of trendTx) {
+      // Use toLocaleDateString to match local grouped keys in trendMap
+      const dateKey = t.createdAt.toLocaleDateString('en-CA');
       if (trendMap.has(dateKey)) {
-        trendMap.set(dateKey, trendMap.get(dateKey)! + salesAmount);
+        trendMap.set(dateKey, trendMap.get(dateKey)! + Number(t.amount));
       }
     }
 

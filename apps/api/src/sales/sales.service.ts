@@ -324,12 +324,23 @@ export class SalesService {
         });
       }
 
+      const now = new Date();
+      const formattedTime = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      const shiftDate = new Date(shift.startTime);
+      const shiftPeriod = shiftDate.getHours() < 12 ? 'M' : 'N';
+      const shiftName = `${shiftDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ${shiftPeriod}`;
+
       await this.accountingService.createTransaction({
         debitCode: '10101',
         creditCode: '10301',
         amount: dto.amount,
-        description: `Credit payment - ${dto.customerName} - Cleared`,
+        description: `Payment received - ${dto.customerName} - ${shiftName} - ${formattedTime}`,
         shiftId: shift.id,
+        customerId: customer?.id,
       });
 
       this.logger.logBusinessOperation(

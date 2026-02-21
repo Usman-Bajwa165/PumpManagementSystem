@@ -3,7 +3,13 @@
 import React, { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
-import { MessageSquare, Loader2, CheckCircle2, XCircle, Settings } from "lucide-react";
+import {
+  MessageSquare,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Settings,
+} from "lucide-react";
 import { useToast } from "@/components/Toast";
 
 export default function WhatsAppPage() {
@@ -55,27 +61,32 @@ export default function WhatsAppPage() {
   const savePreferences = async () => {
     // Validate: At least one payment method must be checked if sales notifications are enabled
     if (preferences.salesNotifications) {
-      if (!preferences.notifyCash && !preferences.notifyCard && !preferences.notifyOnline && !preferences.notifyCredit) {
+      if (
+        !preferences.notifyCash &&
+        !preferences.notifyCard &&
+        !preferences.notifyOnline &&
+        !preferences.notifyCredit
+      ) {
         toast.warning(
           "Validation Error",
-          "Please enable at least one payment method for sales notifications!"
+          "Please enable at least one payment method for sales notifications!",
         );
         return;
       }
     }
-    
+
     setIsSaving(true);
     try {
       await api.post("/whatsapp/preferences", preferences);
       toast.success(
         "Preferences Saved!",
-        "Your notification preferences have been updated successfully."
+        "Your notification preferences have been updated successfully.",
       );
     } catch (err) {
       console.error(err);
       toast.error(
         "Save Failed",
-        "Unable to save preferences. Please try again."
+        "Unable to save preferences. Please try again.",
       );
     } finally {
       setIsSaving(false);
@@ -156,7 +167,8 @@ export default function WhatsAppPage() {
                           Failed
                         </span>
                       </>
-                    ) : status?.status === "authenticated" || status?.status === "loading" ? (
+                    ) : status?.status === "authenticated" ||
+                      status?.status === "loading" ? (
                       <>
                         <Loader2
                           className="animate-spin text-blue-500"
@@ -236,47 +248,74 @@ export default function WhatsAppPage() {
                   <div className="space-y-4">
                     {/* Connected Number Info */}
                     <div className="p-4 rounded-xl bg-green-900/10 border border-green-900/20">
-                      <p className="text-sm font-bold text-green-500 mb-2">Connected WhatsApp Number (FROM)</p>
-                      <p className="text-lg font-mono text-zinc-100">+{connectedNumber}</p>
-                      <p className="text-xs text-zinc-500 mt-1">Messages will be sent from this number</p>
+                      <p className="text-sm font-bold text-green-500 mb-2">
+                        Connected WhatsApp Number (FROM)
+                      </p>
+                      <p className="text-lg font-mono text-zinc-100">
+                        +{connectedNumber}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-1">
+                        Messages will be sent from this number
+                      </p>
                     </div>
 
                     {/* Notification Phone Number */}
                     <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
-                      <label className="block text-zinc-100 font-medium mb-2">Send Notifications To (TO)</label>
+                      <label className="block text-zinc-100 font-medium mb-2">
+                        Send Notifications To (TO)
+                      </label>
                       <input
                         type="text"
                         value={preferences.phoneNumber || connectedNumber}
-                        onChange={(e) => setPreferences({ ...preferences, phoneNumber: e.target.value })}
+                        onChange={(e) =>
+                          setPreferences({
+                            ...preferences,
+                            phoneNumber: e.target.value,
+                          })
+                        }
                         className="w-full px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 font-mono"
                         placeholder={connectedNumber || "923001234567"}
                       />
                       <p className="text-xs text-zinc-500 mt-2">
-                        By default, notifications are sent to the connected number. You can change it to send to a different number.
+                        By default, notifications are sent to the connected
+                        number. You can change it to send to a different number.
                       </p>
                     </div>
 
                     {/* Reading Change Notifications (Always Enabled) */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Nozzle Reading Change Alerts</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified when readings are manually adjusted</p>
+                        <p className="text-zinc-100 font-medium">
+                          Nozzle Reading Change Alerts
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Notified when readings are manually adjusted
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-green-500 font-bold">ALWAYS ON</span>
+                        <span className="text-xs text-green-500 font-bold">
+                          ALWAYS ON
+                        </span>
                         <div className="w-12 h-6 bg-green-600 rounded-full flex items-center justify-end px-1">
                           <div className="w-4 h-4 bg-white rounded-full" />
                         </div>
                       </div>
                     </div>
+
                     {/* Backup Notifications (Always Enabled) */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Backup Notifications</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified when backups are created</p>
+                        <p className="text-zinc-100 font-medium">
+                          Backup Notifications
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Notified when backups are created
+                        </p>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-green-500 font-bold">ALWAYS ON</span>
+                        <span className="text-xs text-green-500 font-bold">
+                          ALWAYS ON
+                        </span>
                         <div className="w-12 h-6 bg-green-600 rounded-full flex items-center justify-end px-1">
                           <div className="w-4 h-4 bg-white rounded-full" />
                         </div>
@@ -286,13 +325,24 @@ export default function WhatsAppPage() {
                     {/* Sales Notifications */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Sales Notifications</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified on sales (configure payment methods below)</p>
+                        <p className="text-zinc-100 font-medium">
+                          Sales Notifications
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Notified on sales (configure payment methods below)
+                        </p>
                       </div>
                       <button
-                        onClick={() => setPreferences({ ...preferences, salesNotifications: !preferences.salesNotifications })}
+                        onClick={() =>
+                          setPreferences({
+                            ...preferences,
+                            salesNotifications: !preferences.salesNotifications,
+                          })
+                        }
                         className={`w-12 h-6 rounded-full flex items-center transition-all ${
-                          preferences.salesNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                          preferences.salesNotifications
+                            ? "bg-green-600 justify-end"
+                            : "bg-zinc-700 justify-start"
                         } px-1`}
                       >
                         <div className="w-4 h-4 bg-white rounded-full" />
@@ -302,16 +352,27 @@ export default function WhatsAppPage() {
                     {/* Payment Method Sub-Options */}
                     {preferences.salesNotifications && (
                       <div className="ml-4 space-y-3 p-4 rounded-xl bg-zinc-950/30 border border-zinc-800">
-                        <p className="text-sm text-zinc-400 font-medium mb-3">Payment Methods (at least one required):</p>
-                        
+                        <p className="text-sm text-zinc-400 font-medium mb-3">
+                          Payment Methods (at least one required):
+                        </p>
+
                         {/* Cash */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <label className="text-sm text-zinc-300">Cash Payments</label>
+                            <label className="text-sm text-zinc-300">
+                              Cash Payments
+                            </label>
                             <button
-                              onClick={() => setPreferences({ ...preferences, notifyCash: !preferences.notifyCash })}
+                              onClick={() =>
+                                setPreferences({
+                                  ...preferences,
+                                  notifyCash: !preferences.notifyCash,
+                                })
+                              }
                               className={`w-10 h-5 rounded-full flex items-center transition-all ${
-                                preferences.notifyCash ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                                preferences.notifyCash
+                                  ? "bg-green-600 justify-end"
+                                  : "bg-zinc-700 justify-start"
                               } px-0.5`}
                             >
                               <div className="w-3.5 h-3.5 bg-white rounded-full" />
@@ -321,8 +382,20 @@ export default function WhatsAppPage() {
                             <input
                               type="number"
                               min="0"
-                              value={preferences.minCashAmount === 0 ? "" : preferences.minCashAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCashAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                              value={
+                                preferences.minCashAmount === 0
+                                  ? ""
+                                  : preferences.minCashAmount
+                              }
+                              onChange={(e) =>
+                                setPreferences({
+                                  ...preferences,
+                                  minCashAmount:
+                                    e.target.value === ""
+                                      ? 0
+                                      : parseFloat(e.target.value),
+                                })
+                              }
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -332,11 +405,20 @@ export default function WhatsAppPage() {
                         {/* Card */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <label className="text-sm text-zinc-300">Card Payments</label>
+                            <label className="text-sm text-zinc-300">
+                              Card Payments
+                            </label>
                             <button
-                              onClick={() => setPreferences({ ...preferences, notifyCard: !preferences.notifyCard })}
+                              onClick={() =>
+                                setPreferences({
+                                  ...preferences,
+                                  notifyCard: !preferences.notifyCard,
+                                })
+                              }
                               className={`w-10 h-5 rounded-full flex items-center transition-all ${
-                                preferences.notifyCard ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                                preferences.notifyCard
+                                  ? "bg-green-600 justify-end"
+                                  : "bg-zinc-700 justify-start"
                               } px-0.5`}
                             >
                               <div className="w-3.5 h-3.5 bg-white rounded-full" />
@@ -346,8 +428,20 @@ export default function WhatsAppPage() {
                             <input
                               type="number"
                               min="0"
-                              value={preferences.minCardAmount === 0 ? "" : preferences.minCardAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCardAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                              value={
+                                preferences.minCardAmount === 0
+                                  ? ""
+                                  : preferences.minCardAmount
+                              }
+                              onChange={(e) =>
+                                setPreferences({
+                                  ...preferences,
+                                  minCardAmount:
+                                    e.target.value === ""
+                                      ? 0
+                                      : parseFloat(e.target.value),
+                                })
+                              }
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -357,11 +451,20 @@ export default function WhatsAppPage() {
                         {/* Online */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <label className="text-sm text-zinc-300">Online Transfers</label>
+                            <label className="text-sm text-zinc-300">
+                              Online Transfers
+                            </label>
                             <button
-                              onClick={() => setPreferences({ ...preferences, notifyOnline: !preferences.notifyOnline })}
+                              onClick={() =>
+                                setPreferences({
+                                  ...preferences,
+                                  notifyOnline: !preferences.notifyOnline,
+                                })
+                              }
                               className={`w-10 h-5 rounded-full flex items-center transition-all ${
-                                preferences.notifyOnline ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                                preferences.notifyOnline
+                                  ? "bg-green-600 justify-end"
+                                  : "bg-zinc-700 justify-start"
                               } px-0.5`}
                             >
                               <div className="w-3.5 h-3.5 bg-white rounded-full" />
@@ -371,8 +474,20 @@ export default function WhatsAppPage() {
                             <input
                               type="number"
                               min="0"
-                              value={preferences.minOnlineAmount === 0 ? "" : preferences.minOnlineAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minOnlineAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                              value={
+                                preferences.minOnlineAmount === 0
+                                  ? ""
+                                  : preferences.minOnlineAmount
+                              }
+                              onChange={(e) =>
+                                setPreferences({
+                                  ...preferences,
+                                  minOnlineAmount:
+                                    e.target.value === ""
+                                      ? 0
+                                      : parseFloat(e.target.value),
+                                })
+                              }
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -382,11 +497,20 @@ export default function WhatsAppPage() {
                         {/* Credit */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <label className="text-sm text-zinc-300">Credit Sales (Pay Later)</label>
+                            <label className="text-sm text-zinc-300">
+                              Credit Sales (Pay Later)
+                            </label>
                             <button
-                              onClick={() => setPreferences({ ...preferences, notifyCredit: !preferences.notifyCredit })}
+                              onClick={() =>
+                                setPreferences({
+                                  ...preferences,
+                                  notifyCredit: !preferences.notifyCredit,
+                                })
+                              }
                               className={`w-10 h-5 rounded-full flex items-center transition-all ${
-                                preferences.notifyCredit ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                                preferences.notifyCredit
+                                  ? "bg-green-600 justify-end"
+                                  : "bg-zinc-700 justify-start"
                               } px-0.5`}
                             >
                               <div className="w-3.5 h-3.5 bg-white rounded-full" />
@@ -396,8 +520,20 @@ export default function WhatsAppPage() {
                             <input
                               type="number"
                               min="0"
-                              value={preferences.minCreditAmount === 0 ? "" : preferences.minCreditAmount}
-                              onChange={(e) => setPreferences({ ...preferences, minCreditAmount: e.target.value === "" ? 0 : parseFloat(e.target.value) })}
+                              value={
+                                preferences.minCreditAmount === 0
+                                  ? ""
+                                  : preferences.minCreditAmount
+                              }
+                              onChange={(e) =>
+                                setPreferences({
+                                  ...preferences,
+                                  minCreditAmount:
+                                    e.target.value === ""
+                                      ? 0
+                                      : parseFloat(e.target.value),
+                                })
+                              }
                               className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                               placeholder="Min amount (Rs.) - 0 for all"
                             />
@@ -409,32 +545,53 @@ export default function WhatsAppPage() {
                     {/* Shift Notifications */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Shift Notifications</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified when shifts open/close</p>
+                        <p className="text-zinc-100 font-medium">
+                          Shift Notifications
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Notified when shifts open/close
+                        </p>
                       </div>
                       <button
-                        onClick={() => setPreferences({ ...preferences, shiftNotifications: !preferences.shiftNotifications })}
+                        onClick={() =>
+                          setPreferences({
+                            ...preferences,
+                            shiftNotifications: !preferences.shiftNotifications,
+                          })
+                        }
                         className={`w-12 h-6 rounded-full flex items-center transition-all ${
-                          preferences.shiftNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                          preferences.shiftNotifications
+                            ? "bg-green-600 justify-end"
+                            : "bg-zinc-700 justify-start"
                         } px-1`}
                       >
                         <div className="w-4 h-4 bg-white rounded-full" />
                       </button>
                     </div>
 
-                    {/* Credit Notifications - REMOVED (now under Sales) */}
-
                     {/* Inventory Notifications */}
                     <div className="p-4 rounded-xl bg-zinc-950/50 border border-zinc-900 space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-zinc-100 font-medium">Inventory Alerts</p>
-                          <p className="text-xs text-zinc-500 mt-1">Notified when stock is low</p>
+                          <p className="text-zinc-100 font-medium">
+                            Inventory Alerts
+                          </p>
+                          <p className="text-xs text-zinc-500 mt-1">
+                            Notified when stock is low
+                          </p>
                         </div>
                         <button
-                          onClick={() => setPreferences({ ...preferences, inventoryNotifications: !preferences.inventoryNotifications })}
+                          onClick={() =>
+                            setPreferences({
+                              ...preferences,
+                              inventoryNotifications:
+                                !preferences.inventoryNotifications,
+                            })
+                          }
                           className={`w-12 h-6 rounded-full flex items-center transition-all ${
-                            preferences.inventoryNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                            preferences.inventoryNotifications
+                              ? "bg-green-600 justify-end"
+                              : "bg-zinc-700 justify-start"
                           } px-1`}
                         >
                           <div className="w-4 h-4 bg-white rounded-full" />
@@ -442,18 +599,36 @@ export default function WhatsAppPage() {
                       </div>
                       {preferences.inventoryNotifications && (
                         <div className="space-y-2">
-                          <label className="text-sm text-zinc-300">Low Fuel Threshold (%)</label>
+                          <label className="text-sm text-zinc-300">
+                            Low Fuel Threshold (%)
+                          </label>
                           <input
                             type="number"
                             min="1"
                             max="100"
                             value={preferences.lowFuelThreshold}
-                            onChange={(e) => setPreferences({ ...preferences, lowFuelThreshold: e.target.value === "" ? "" : parseInt(e.target.value) })}
-                            onBlur={(e) => { if (e.target.value === "") setPreferences({ ...preferences, lowFuelThreshold: 20 }); }}
+                            onChange={(e) =>
+                              setPreferences({
+                                ...preferences,
+                                lowFuelThreshold:
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseInt(e.target.value),
+                              })
+                            }
+                            onBlur={(e) => {
+                              if (e.target.value === "")
+                                setPreferences({
+                                  ...preferences,
+                                  lowFuelThreshold: 20,
+                                });
+                            }}
                             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-100 text-sm"
                             placeholder="20"
                           />
-                          <p className="text-xs text-zinc-500">Alert when tank level falls below this percentage</p>
+                          <p className="text-xs text-zinc-500">
+                            Alert when tank level falls below this percentage
+                          </p>
                         </div>
                       )}
                     </div>
@@ -461,13 +636,24 @@ export default function WhatsAppPage() {
                     {/* Stock Change Notifications */}
                     <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/50 border border-zinc-900">
                       <div>
-                        <p className="text-zinc-100 font-medium">Stock Change Notifications</p>
-                        <p className="text-xs text-zinc-500 mt-1">Notified when stock is purchased or adjusted</p>
+                        <p className="text-zinc-100 font-medium">
+                          Stock Change Notifications
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          Notified when stock is purchased or adjusted
+                        </p>
                       </div>
                       <button
-                        onClick={() => setPreferences({ ...preferences, stockNotifications: !preferences.stockNotifications })}
+                        onClick={() =>
+                          setPreferences({
+                            ...preferences,
+                            stockNotifications: !preferences.stockNotifications,
+                          })
+                        }
                         className={`w-12 h-6 rounded-full flex items-center transition-all ${
-                          preferences.stockNotifications ? "bg-green-600 justify-end" : "bg-zinc-700 justify-start"
+                          preferences.stockNotifications
+                            ? "bg-green-600 justify-end"
+                            : "bg-zinc-700 justify-start"
                         } px-1`}
                       >
                         <div className="w-4 h-4 bg-white rounded-full" />

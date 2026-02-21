@@ -121,6 +121,7 @@ export class InventoryService {
             amount: paid,
             description: `Purchase Payment (Stock) for ${tank.name}`,
             shiftId: null, // Admin action
+            supplierId: dto.supplierId,
           },
           tx,
         ); // Pass tx

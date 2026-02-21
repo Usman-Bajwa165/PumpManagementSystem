@@ -91,6 +91,7 @@ export default function ReportsPage() {
     "SUPPLIER",
   );
   const [selectedEntityId, setSelectedEntityId] = useState("");
+  const [showLogs, setShowLogs] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -101,7 +102,10 @@ export default function ReportsPage() {
     const lType = searchParams.get("ledgerType") as "SUPPLIER" | "CUSTOMER";
 
     if (type) setReportType(type);
-    if (entityId) setSelectedEntityId(entityId);
+    if (entityId) {
+      setSelectedEntityId(entityId);
+      setShowLogs(true);
+    }
     if (lType) setLedgerType(lType);
 
     // Trigger fetch if all params are present
@@ -274,17 +278,19 @@ export default function ReportsPage() {
           "Date",
           "Qty Sold",
           "Cash Sales",
+          "Card Sales",
+          "Online Sales",
           "Credit Sales",
           "Total Sale",
-          "Profit",
         ];
         tableData = records.map((r: any) => [
           formatDate(r.date),
           `${(r.quantitySold || 0).toFixed(2)} L`,
           `Rs. ${(r.cashSales || 0).toLocaleString()}`,
+          `Rs. ${(r.cardSales || 0).toLocaleString()}`,
+          `Rs. ${(r.onlineSales || 0).toLocaleString()}`,
           `Rs. ${(r.creditSales || 0).toLocaleString()}`,
           `Rs. ${(r.totalSales || 0).toLocaleString()}`,
-          `Rs. ${(r.profit || 0).toLocaleString()}`,
         ]);
       } else if (salesViewMode === "DETAILED_SALES") {
         columns = [
@@ -836,11 +842,10 @@ export default function ReportsPage() {
                             <th className="px-6 py-5">Date</th>
                             <th className="px-6 py-5 text-right">Qty Sold</th>
                             <th className="px-6 py-5 text-right">Cash</th>
+                            <th className="px-6 py-5 text-right">Card</th>
+                            <th className="px-6 py-5 text-right">Online</th>
                             <th className="px-6 py-5 text-right">Credit</th>
                             <th className="px-6 py-5 text-right">Total Sale</th>
-                            <th className="px-6 py-5 text-right text-emerald-500">
-                              Profit
-                            </th>
                           </tr>
                         )}
                         {salesViewMode === "SHIFT_WISE" && (
@@ -913,13 +918,16 @@ export default function ReportsPage() {
                                     {(row.cashSales || 0).toLocaleString()}
                                   </td>
                                   <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.cardSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
+                                    {(row.onlineSales || 0).toLocaleString()}
+                                  </td>
+                                  <td className="px-6 py-5 text-right font-mono text-zinc-500">
                                     {(row.creditSales || 0).toLocaleString()}
                                   </td>
                                   <td className="px-6 py-5 text-right font-bold text-zinc-100 font-mono italic">
                                     Rs. {(row.totalSales || 0).toLocaleString()}
-                                  </td>
-                                  <td className="px-6 py-5 text-right font-black text-emerald-500 font-mono">
-                                    Rs. {(row.profit || 0).toLocaleString()}
                                   </td>
                                 </>
                               )}
@@ -1202,159 +1210,238 @@ export default function ReportsPage() {
 
             {/* Ledger */}
             {reportType === "LEDGER" && (
-              <div className="space-y-8">
-                <div className="flex flex-wrap items-end justify-between gap-6 p-8 rounded-[40px] bg-zinc-900/20 border border-zinc-800 backdrop-blur-md">
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-600 px-1">
-                      Ledger Statement
-                    </p>
-                    <h2 className="text-4xl font-black text-zinc-100 tracking-tighter">
-                      {data.supplier?.name || data.customer?.name}
-                    </h2>
-                    <div className="flex items-center gap-3">
-                      <span className="px-2 py-0.5 rounded-lg bg-zinc-800 text-[10px] font-bold text-zinc-400 uppercase">
-                        {ledgerType}
-                      </span>
-                      <span className="text-zinc-600 text-sm">
-                        {data.supplier?.contact ||
-                          data.customer?.contact ||
-                          "No contact info"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right space-y-1 bg-zinc-950/50 p-6 rounded-3xl border border-zinc-800 min-w-[240px]">
-                    <p className="text-xs uppercase text-zinc-500 font-black tracking-widest px-1">
-                      Net Balance Due
-                    </p>
-                    <p
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => {
+                        setShowLogs(false);
+                        setSelectedEntityId("ALL");
+                      }}
                       className={cn(
-                        "text-4xl font-black font-mono italic",
-                        (data.closingBalance || data.currentBalance) > 0
-                          ? "text-rose-500"
-                          : "text-emerald-500",
+                        "px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                        !showLogs
+                          ? "bg-zinc-100 text-zinc-950"
+                          : "bg-zinc-900 text-zinc-500 hover:text-zinc-300",
                       )}
                     >
-                      Rs.{" "}
-                      {Math.abs(
-                        Number(data.closingBalance || data.currentBalance),
-                      ).toLocaleString()}
-                    </p>
-                    <p className="text-[10px] font-bold text-zinc-700 uppercase">
-                      {(data.closingBalance || data.currentBalance) > 0
-                        ? "To be Paid"
-                        : "Excess / Advance"}
-                    </p>
+                      Summary View
+                    </button>
+                    {selectedEntityId !== "ALL" && (
+                      <button
+                        onClick={() => setShowLogs(true)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                          showLogs
+                            ? "bg-zinc-100 text-zinc-950"
+                            : "bg-zinc-900 text-zinc-500 hover:text-zinc-300",
+                        )}
+                      >
+                        Detailed Logs
+                      </button>
+                    )}
                   </div>
+
+                  {showLogs && selectedEntityId !== "ALL" && (
+                    <div className="flex flex-col items-end">
+                      <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tight">
+                        {ledgerType === "SUPPLIER"
+                          ? data?.supplier?.name
+                          : data?.customer?.name}
+                      </h3>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
+                        Current Balance: Rs.{" "}
+                        {data?.currentBalance?.toLocaleString()}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
-                <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                  <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                {!showLogs || selectedEntityId === "ALL" ? (
+                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
                     <table className="w-full text-left text-sm text-zinc-400 border-collapse">
                       <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
                         <tr>
-                          <th className="px-6 py-5">Date</th>
-                          <th className="px-6 py-5">Flow Description</th>
+                          <th className="px-6 py-5">
+                            {ledgerType === "SUPPLIER"
+                              ? "Supplier Name"
+                              : "Customer Name"}
+                          </th>
                           <th className="px-6 py-5 text-right">Debit (OUT)</th>
                           <th className="px-6 py-5 text-right text-emerald-500">
                             Credit (IN)
                           </th>
                           <th className="px-6 py-5 text-right text-zinc-100">
-                            Balance
+                            Net Balance
                           </th>
+                          <th className="px-6 py-5 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-900">
-                        {(data?.ledger || []).map((row: any, i: number) => (
+                        {(data?.summary || []).map((item: any, i: number) => (
                           <tr
                             key={i}
-                            className="hover:bg-zinc-100/[0.02] transition-colors"
+                            className="hover:bg-zinc-100/2 transition-colors"
                           >
-                            <td className="px-6 py-5 font-mono text-zinc-300 text-xs">
-                              {formatDate(row.date)}
-                            </td>
-                            <td className="px-6 py-5">
-                              <div className="flex flex-col gap-1.5">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-zinc-100 font-bold">
-                                    {row.description}
-                                  </span>
-                                  <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
-                                    {row.type}
-                                  </span>
-                                </div>
-
-                                {row.details && (
-                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
-                                    {ledgerType === "SUPPLIER" ? (
-                                      <>
-                                        <span className="text-zinc-500 italic">
-                                          Purchase Detail:{" "}
-                                          {row.details.quantity}L @ Rs.{" "}
-                                          {row.details.rate}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "font-bold",
-                                            row.details.status === "PAID"
-                                              ? "text-emerald-500"
-                                              : "text-rose-500",
-                                          )}
-                                        >
-                                          Status: {row.details.status} (Paid:
-                                          Rs.{" "}
-                                          {row.details.paidAmount.toLocaleString()}{" "}
-                                          | Rem: Rs.{" "}
-                                          {row.details.remainingAmount.toLocaleString()}
-                                          )
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="text-blue-400 font-black uppercase">
-                                          Vehicle:{" "}
-                                          {row.details.vehicleNumber || "N/A"}
-                                        </span>
-                                        <span className="text-zinc-500">
-                                          {row.details.product} (
-                                          {row.details.quantity}L)
-                                        </span>
-                                        <span className="text-zinc-600">
-                                          via {row.details.nozzle || "Unknown"}
-                                        </span>
-                                        <span className="text-amber-500 font-bold">
-                                          {row.details.shift}
-                                        </span>
-                                        <span className="text-zinc-600">
-                                          @ {row.details.time}
-                                        </span>
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
+                            <td className="px-6 py-5 font-bold text-zinc-100">
+                              {item.name}
                             </td>
                             <td className="px-6 py-5 text-right font-mono text-rose-400/80">
-                              {row.debit > 0
-                                ? (row.debit || 0).toLocaleString()
+                              {item.debit > 0
+                                ? item.debit.toLocaleString()
                                 : "-"}
                             </td>
                             <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
-                              {row.credit > 0
-                                ? (row.credit || 0).toLocaleString()
+                              {item.credit > 0
+                                ? item.credit.toLocaleString()
                                 : "-"}
                             </td>
                             <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                              Rs.{" "}
-                              {row.runningBalance?.toLocaleString() ||
-                                row.balance?.toLocaleString() ||
-                                "-"}
+                              Rs. {item.balance.toLocaleString()}
+                            </td>
+                            <td className="px-6 py-5 text-center">
+                              <button
+                                onClick={() => {
+                                  setSelectedEntityId(item.id);
+                                  setShowLogs(true);
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-400 hover:text-white hover:border-zinc-700 transition-all uppercase"
+                              >
+                                View Logs
+                              </button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
+                ) : (
+                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+                    <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                      <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                        <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                          <tr>
+                            <th className="px-6 py-5">Date</th>
+                            <th className="px-6 py-5">Flow Description</th>
+                            <th className="px-6 py-5 text-right">
+                              Debit (OUT)
+                            </th>
+                            <th className="px-6 py-5 text-right text-emerald-500">
+                              Credit (IN)
+                            </th>
+                            <th className="px-6 py-5 text-right text-zinc-100">
+                              Balance
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900">
+                          {(data?.ledger || []).map((row: any, i: number) => (
+                            <tr
+                              key={i}
+                              className="hover:bg-zinc-100/2 transition-colors"
+                            >
+                              <td className="px-6 py-5 font-mono text-zinc-300 text-xs">
+                                {formatDate(row.date)}
+                              </td>
+                              <td className="px-6 py-5">
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-zinc-100 font-bold">
+                                      {row.description}
+                                    </span>
+                                    <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
+                                      {row.type}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
+                                    <span className="text-blue-400 font-black uppercase">
+                                      {ledgerType === "SUPPLIER"
+                                        ? row.supplierName
+                                        : row.customerName}
+                                    </span>
+                                    {row.details && (
+                                      <>
+                                        {ledgerType === "SUPPLIER" ? (
+                                          <>
+                                            <span className="text-zinc-500 italic">
+                                              Purchase Detail:{" "}
+                                              {row.details.quantity}L @ Rs.{" "}
+                                              {row.details.rate}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-bold",
+                                                row.details.status === "PAID"
+                                                  ? "text-emerald-500"
+                                                  : "text-rose-500",
+                                              )}
+                                            >
+                                              Status: {row.details.status}{" "}
+                                              (Paid: Rs.{" "}
+                                              {(
+                                                row.details.paidAmount || 0
+                                              ).toLocaleString()}{" "}
+                                              | Rem: Rs.{" "}
+                                              {(
+                                                row.details.remainingAmount || 0
+                                              ).toLocaleString()}
+                                              )
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="text-zinc-400 font-bold">
+                                              Vehicle:{" "}
+                                              {row.details.vehicleNumber ||
+                                                "N/A"}
+                                            </span>
+                                            <span className="text-zinc-500">
+                                              {row.details.product} (
+                                              {row.details.quantity}L)
+                                            </span>
+                                            <span className="text-zinc-600">
+                                              via{" "}
+                                              {row.details.nozzle || "Unknown"}
+                                            </span>
+                                            <span className="text-amber-500 font-bold">
+                                              {row.details.shift}
+                                            </span>
+                                            <span className="text-zinc-600 font-mono">
+                                              @ {row.details.time}
+                                            </span>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-5 text-right font-mono text-rose-400/80">
+                                {row.debit > 0
+                                  ? (row.debit || 0).toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
+                                {row.credit > 0
+                                  ? (row.credit || 0).toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                                Rs.{" "}
+                                {(
+                                  row.runningBalance ??
+                                  row.balance ??
+                                  0
+                                ).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

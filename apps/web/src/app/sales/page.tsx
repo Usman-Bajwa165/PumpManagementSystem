@@ -200,10 +200,13 @@ export default function SalesPage() {
       return;
     }
 
-    if (paymentMethod === "ONLINE" && !customerName) {
+    if (
+      (paymentMethod === "CARD" || paymentMethod === "ONLINE") &&
+      !customerName
+    ) {
       toast.warning(
         "Name Required",
-        "Sender name required for online transfer",
+        "Sender name is required for card/online payment",
       );
       return;
     }
@@ -638,11 +641,7 @@ export default function SalesPage() {
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && selectedAccount) {
                           e.preventDefault();
-                          if (paymentMethod === "ONLINE") {
-                            customerNameRef.current?.focus();
-                          } else {
-                            descriptionRef.current?.focus();
-                          }
+                          customerNameRef.current?.focus();
                         }
                       }}
                       className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
@@ -700,7 +699,9 @@ export default function SalesPage() {
                         {paymentMethod === "CREDIT"
                           ? "Customer Name"
                           : "Sender Name"}{" "}
-                        {paymentMethod === "CREDIT" && (
+                        {(paymentMethod === "CREDIT" ||
+                          paymentMethod === "CARD" ||
+                          paymentMethod === "ONLINE") && (
                           <span className="text-red-500">*</span>
                         )}
                       </label>
