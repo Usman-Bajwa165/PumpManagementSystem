@@ -415,4 +415,10 @@ export class AccountingService implements OnModuleInit {
 
     return updated;
   }
+
+  async getPaymentAccounts() {
+    return this.prisma.paymentAccount.findMany({
+      orderBy: { name: 'asc' },
+    });
+  }
 }

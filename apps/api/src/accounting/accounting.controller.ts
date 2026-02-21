@@ -1,4 +1,14 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+} from '@nestjs/common';
 import { AccountingService } from './accounting.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -58,5 +68,11 @@ export class AccountingController {
   @Post('accounts/:id/reset-balance')
   async resetAccountBalance(@Param('id') id: string, @Request() req) {
     return this.accountingService.resetAccountBalance(id, req.user.userId);
+  }
+
+  @Roles(Role.ADMIN, Role.MANAGER)
+  @Get('payment-accounts')
+  async getPaymentAccounts() {
+    return this.accountingService.getPaymentAccounts();
   }
 }

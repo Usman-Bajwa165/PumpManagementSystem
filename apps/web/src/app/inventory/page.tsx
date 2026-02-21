@@ -8,12 +8,13 @@ import {
   Package,
   Droplet,
   Plus,
-  TrendingDown,
   Loader2,
-  CheckCircle2,
   AlertTriangle,
-  ArrowRight,
   TrendingUp,
+  TrendingDown,
+  CreditCard,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +31,14 @@ interface Tank {
   currentStock: number;
   capacity: number;
   product: Product;
+}
+
+interface PaymentAccount {
+  id: string;
+  name: string;
+  provider: string;
+  accountNumber: string;
+  type: string;
 }
 
 export default function InventoryPage() {
@@ -61,7 +70,11 @@ export default function InventoryPage() {
     "PAID" | "UNPAID" | "PARTIAL"
   >("UNPAID");
   const [paidAmount, setPaidAmount] = useState("");
-
+  const [paymentMethod, setPaymentMethod] = useState<
+    "CASH" | "CARD" | "ONLINE"
+  >("CASH");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
   const fetchData = async () => {
     try {
       const [tanksRes, suppliersRes] = await Promise.all([
@@ -78,8 +91,18 @@ export default function InventoryPage() {
     }
   };
 
+  const fetchPaymentAccounts = async () => {
+    try {
+      const res = await api.get("/accounting/payment-accounts");
+      setPaymentAccounts(res.data);
+    } catch (err) {
+      console.error("Failed to fetch payment accounts", err);
+    }
+  };
+
   useEffect(() => {
     fetchData();
+    fetchPaymentAccounts();
   }, []);
 
   const handlePurchase = async (e: React.FormEvent) => {
@@ -106,7 +129,16 @@ export default function InventoryPage() {
         supplierId: supplier, // Now using ID from select
         paymentStatus,
         paidAmount:
-          paymentStatus === "PARTIAL" ? Number(paidAmount) : undefined,
+          paymentStatus === "PARTIAL"
+            ? Number(paidAmount)
+            : paymentStatus === "PAID"
+              ? Number(cost)
+              : undefined,
+        paymentMethod: paymentStatus !== "UNPAID" ? paymentMethod : undefined,
+        paymentAccountId:
+          paymentStatus !== "UNPAID" && paymentMethod !== "CASH"
+            ? selectedAccountId
+            : undefined,
       });
       setSuccess("Stock purchase recorded successfully!");
       setShowPurchaseModal(false);
@@ -458,6 +490,59 @@ export default function InventoryPage() {
                     </div>
                   )}
                 </div>
+
+                {paymentStatus !== "UNPAID" && (
+                  <div className="space-y-4 p-4 rounded-2xl bg-zinc-900/50 border border-zinc-800 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">
+                      Transfer Method
+                    </label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { id: "CASH", label: "Cash", icon: Banknote },
+                        { id: "CARD", label: "Card", icon: CreditCard },
+                        { id: "ONLINE", label: "Online", icon: Smartphone },
+                      ].map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setPaymentMethod(m.id as any)}
+                          className={cn(
+                            "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
+                            paymentMethod === m.id
+                              ? "border-red-600 bg-red-600/10 text-red-500"
+                              : "border-zinc-800 bg-zinc-950 text-zinc-500 hover:border-zinc-700",
+                          )}
+                        >
+                          <m.icon size={18} />
+                          <span className="text-[10px] font-bold">
+                            {m.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {(paymentMethod === "CARD" ||
+                      paymentMethod === "ONLINE") && (
+                      <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                        <label className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">
+                          Payout Account
+                        </label>
+                        <select
+                          value={selectedAccountId}
+                          onChange={(e) => setSelectedAccountId(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-200 outline-none focus:border-red-600 transition-all appearance-none"
+                        >
+                          <option value="">Select Account...</option>
+                          {paymentAccounts.map((acc: any) => (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.name} ({acc.provider})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {error && (
                   <p className="text-red-500 text-sm font-medium">{error}</p>

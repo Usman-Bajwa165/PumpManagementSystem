@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -25,7 +32,16 @@ export class SalesController {
 
   @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)
   @Post('clear-credit')
-  clearCredit(@Request() req: any, @Body() dto: { customerName: string; amount: number }) {
+  clearCredit(
+    @Request() req: any,
+    @Body()
+    dto: {
+      customerName: string;
+      amount: number;
+      paymentMethod: 'CASH' | 'CARD' | 'ONLINE';
+      paymentAccountId?: string;
+    },
+  ) {
     return this.salesService.clearCredit(req.user.sub, dto);
   }
 }

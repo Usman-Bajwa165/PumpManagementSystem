@@ -31,4 +31,12 @@ export class PurchaseProductDto {
   @IsNumber()
   @IsOptional()
   paidAmount?: number;
+
+  @IsString()
+  @IsOptional()
+  paymentMethod?: string;
+
+  @IsString()
+  @IsOptional()
+  paymentAccountId?: string;
 }

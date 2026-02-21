@@ -169,10 +169,13 @@ export default function SalesPage() {
         await api.post("/sales/clear-credit", {
           customerName: selectedCustomer,
           amount: Number(amount),
+          paymentMethod,
+          paymentAccountId: selectedAccount || undefined,
         });
         toast.success("Credit Cleared", "Payment recorded successfully!");
         setAmount("");
         setSelectedCustomer("");
+        setSelectedAccount("");
         setIsCreditPayment(false);
         const creditRes = await api.get("/sales/credit-customers");
         setCreditCustomers(creditRes.data);
@@ -406,15 +409,61 @@ export default function SalesPage() {
                       disabled={!selectedCustomer}
                     />
                   </div>
-                  {selectedCustomer && (
-                    <div className="flex items-center justify-between text-xs px-1">
-                      <span className="text-zinc-500">Maximum Payable</span>
-                      <span className="text-zinc-300 font-mono">
-                        Rs. {maxPayable.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
                 </div>
+
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                    Payment Method
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { value: "CASH", icon: Banknote, label: "Cash" },
+                      { value: "CARD", icon: CreditCard, label: "Card" },
+                      { value: "ONLINE", icon: Smartphone, label: "Online" },
+                    ].map((method) => (
+                      <button
+                        key={method.value}
+                        type="button"
+                        onClick={() => setPaymentMethod(method.value as any)}
+                        className={cn(
+                          "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all duration-300",
+                          paymentMethod === method.value
+                            ? "border-red-600 bg-red-600 text-white shadow-lg"
+                            : "border-zinc-800 bg-zinc-900/50 text-zinc-500 hover:border-zinc-700 hover:bg-zinc-800",
+                        )}
+                      >
+                        <method.icon size={20} />
+                        <span className="font-bold text-[10px] uppercase tracking-wider">
+                          {method.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(paymentMethod === "CARD" || paymentMethod === "ONLINE") && (
+                  <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                      Select Account <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={selectedAccount}
+                      onChange={(e) => setSelectedAccount(e.target.value)}
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
+                    >
+                      <option value="">Choose Payout Account</option>
+                      {paymentAccounts
+                        .filter((acc) => acc.type === paymentMethod)
+                        .map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name}{" "}
+                            {acc.accountNumber ? `(${acc.accountNumber})` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-6 animate-in slide-in-from-left duration-300">

@@ -278,7 +278,12 @@ export class SalesService {
 
   async clearCredit(
     userId: string,
-    dto: { customerName: string; amount: number },
+    dto: {
+      customerName: string;
+      amount: number;
+      paymentMethod?: string;
+      paymentAccountId?: string;
+    },
   ) {
     try {
       const shift = await this.shiftsService.getCurrentShift();
@@ -297,6 +302,7 @@ export class SalesService {
         },
       });
 
+      let updatedBalance = 0;
       if (customer) {
         let remainingPayment = dto.amount;
 
@@ -318,34 +324,44 @@ export class SalesService {
           remainingPayment -= paymentForThisRecord;
         }
 
-        await this.prisma.creditCustomer.update({
+        const updatedCustomer = await this.prisma.creditCustomer.update({
           where: { name: dto.customerName },
           data: { totalCredit: { decrement: dto.amount } },
         });
+        updatedBalance = Number(updatedCustomer.totalCredit);
       }
 
       const now = new Date();
-      const formattedTime = now.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
+      const dateStr = now.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
       });
-      const shiftDate = new Date(shift.startTime);
-      const shiftPeriod = shiftDate.getHours() < 12 ? 'M' : 'N';
-      const shiftName = `${shiftDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} ${shiftPeriod}`;
+      const timeStr = now
+        .toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .replace(/\s/g, '');
+      const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
+
+      const method = dto.paymentMethod || 'CASH';
+      const debitCode = method === 'CASH' ? '10101' : '10201';
 
       await this.accountingService.createTransaction({
-        debitCode: '10101',
+        debitCode,
         creditCode: '10301',
         amount: dto.amount,
-        description: `Payment received - ${dto.customerName} - ${shiftName} - ${formattedTime}`,
+        description: `Credit Cleared - ${dto.customerName} - ${method} - ${formattedDateTime}`,
         shiftId: shift.id,
         customerId: customer?.id,
+        paymentAccountId: dto.paymentAccountId,
       });
 
       this.logger.logBusinessOperation(
         'CREDIT_CLEARED',
-        `${dto.customerName}: Rs. ${dto.amount}`,
+        `${dto.customerName}: Rs. ${dto.amount} (${method})`,
         userId,
         true,
       );
@@ -357,7 +373,8 @@ export class SalesService {
           await this.whatsappService.notifyCashPayment(prefs.phoneNumber, {
             customer: dto.customerName,
             amount: dto.amount,
-            method: 'CASH (Credit Clearance)',
+            method: `${method} (Credit Clearance)`,
+            remainingAmount: updatedBalance,
           });
         }
       } catch (err) {
@@ -367,7 +384,7 @@ export class SalesService {
         );
       }
 
-      return { success: true };
+      return { success: true, remainingAmount: updatedBalance };
     } catch (error: any) {
       this.logger.error(
         `Credit clear failed: ${dto.customerName}`,

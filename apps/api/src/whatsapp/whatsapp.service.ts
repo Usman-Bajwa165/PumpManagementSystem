@@ -232,9 +232,35 @@ export class WhatsappService implements OnModuleInit {
 
   async notifyCashPayment(
     to: string,
-    data: { customer: string; amount: number; method: string },
+    data: {
+      customer: string;
+      amount: number;
+      method: string;
+      remainingAmount?: number;
+    },
   ) {
-    const msg = `💰 *Payment Received* 💰\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nMethod: ${data.method}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    let msg = `💰 *Payment Received* 💰\nCustomer: ${data.customer}\nAmount: Rs. ${data.amount}\nMethod: ${data.method}`;
+    if (data.remainingAmount !== undefined) {
+      msg += `\nRemaining: Rs. ${data.remainingAmount.toLocaleString()}`;
+    }
+    msg += `\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+    return this.sendMessage(to, msg);
+  }
+
+  async notifySupplierPayment(
+    to: string,
+    data: {
+      supplier: string;
+      amount: number;
+      method: string;
+      remainingAmount?: number;
+    },
+  ) {
+    let msg = `💸 *Supplier Payment* 💸\nSupplier: ${data.supplier}\nAmount: Rs. ${data.amount}\nMethod: ${data.method}`;
+    if (data.remainingAmount !== undefined) {
+      msg += `\nRemaining: Rs. ${data.remainingAmount.toLocaleString()}`;
+    }
+    msg += `\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
     return this.sendMessage(to, msg);
   }
 

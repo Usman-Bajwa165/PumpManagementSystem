@@ -2,10 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class SuppliersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsappService: WhatsappService,
+  ) {}
 
   create(createSupplierDto: CreateSupplierDto) {
     return this.prisma.supplier.create({
@@ -51,11 +55,9 @@ export class SuppliersService {
     amount: number,
     userId: string,
     paymentAccountId?: string,
+    paymentMethod?: string,
   ) {
-    const supplier = await this.prisma.supplier.findUnique({
-      where: { id },
-    });
-
+    const supplier = await this.prisma.supplier.findUnique({ where: { id } });
     if (!supplier) {
       throw new Error('Supplier not found');
     }
@@ -70,20 +72,37 @@ export class SuppliersService {
       // 1. Resolve Payment Account
       let creditAccId = paymentAccountId;
       if (!creditAccId) {
-        const cashAcc = await tx.account.findUnique({
-          where: { code: '10101' },
+        const method = paymentMethod || 'CASH';
+        const code = method === 'CASH' ? '10101' : '10201';
+        const acc = await tx.account.findUnique({
+          where: { code },
         });
-        if (!cashAcc) throw new Error('Default Cash account (10101) not found');
-        creditAccId = cashAcc.id;
+        if (!acc) throw new Error(`Default account (${code}) not found`);
+        creditAccId = acc.id;
       }
 
-      // 1. Create Transaction
+      // 2. Create Transaction
       // Debit: Accounts Payable (20101) - Reducing Liability
       // Credit: Cash/Bank Account - Reducing Asset
       const debitAcc = await tx.account.findFirst({
         where: { code: '20101' },
       });
       if (!debitAcc) throw new Error('Accounts Payable (20101) not found');
+
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      });
+      const timeStr = now
+        .toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+        .replace(/\s/g, '');
+      const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
 
       const trans = await tx.transaction.create({
         data: {
@@ -92,17 +111,18 @@ export class SuppliersService {
           creditAccountId: creditAccId,
           amount: amount,
           createdById: userId,
-          description: `Payment to ${supplier.name}`,
+          description: `Supplier Payment - ${supplier.name} - ${paymentMethod || 'CASH'} - ${formattedDateTime}`,
+          paymentAccountId: paymentAccountId,
         },
       });
 
-      // 2. Update Supplier Balance
-      await tx.supplier.update({
+      // 3. Update Supplier Balance
+      const updatedSupplier = await tx.supplier.update({
         where: { id },
         data: { balance: { decrement: amount } },
       });
 
-      // 3. Update Account Balances
+      // 4. Update Account Balances
       await tx.account.update({
         where: { id: debitAcc.id },
         data: { balance: { decrement: amount } },
@@ -113,7 +133,7 @@ export class SuppliersService {
         data: { balance: { decrement: amount } },
       });
 
-      // 4. Allocate payment to purchases (FIFO)
+      // 5. Allocate payment to purchases (FIFO)
       let remainingToApply = amount;
       const outstandingPurchases = await tx.purchase.findMany({
         where: {
@@ -145,6 +165,21 @@ export class SuppliersService {
         });
 
         remainingToApply -= applyNow;
+      }
+
+      // 6. WhatsApp Notification
+      try {
+        const prefs = await this.prisma.notificationPreferences.findFirst();
+        if (prefs && prefs.inventoryNotifications) {
+          await this.whatsappService.notifySupplierPayment(prefs.phoneNumber, {
+            supplier: supplier.name,
+            amount: amount,
+            method: paymentMethod || 'CASH',
+            remainingAmount: Number(updatedSupplier.balance),
+          });
+        }
+      } catch (err: any) {
+        console.error('Failed to send supplier payment notification', err);
       }
 
       return trans;

@@ -12,8 +12,10 @@ import {
   Phone,
   Wallet,
   ArrowUpRight,
-  MoreVertical,
   Trash2,
+  CreditCard,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -56,6 +58,12 @@ export default function SuppliersPage() {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearAmount, setClearAmount] = useState("");
 
+  const [paymentMethod, setPaymentMethod] = useState<
+    "CASH" | "CARD" | "ONLINE"
+  >("CASH");
+  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
+
   const { user } = useAuth();
   const router = useRouter();
   const isReadOnly = user?.role === "OPERATOR";
@@ -83,6 +91,19 @@ export default function SuppliersPage() {
     }
   };
 
+  const fetchPaymentAccounts = async () => {
+    try {
+      const res = await api.get("/accounting/payment-accounts");
+      setPaymentAccounts(res.data);
+    } catch (err) {
+      console.error("Failed to fetch payment accounts", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPaymentAccounts();
+  }, []);
+
   useEffect(() => {
     if (activeTab === "suppliers") {
       fetchSuppliers();
@@ -102,7 +123,7 @@ export default function SuppliersPage() {
       setContact("");
       fetchSuppliers();
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to add supplier");
+      setError(err.response?.data?.message || "Payment failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -115,14 +136,19 @@ export default function SuppliersPage() {
     setError("");
     try {
       await api.post(`/suppliers/${selectedSupplier.id}/pay`, {
-        amount: Number(payAmount),
-        userId: user?.sub,
+        amount: parseFloat(payAmount),
+        userId: user?.sub || "ADMIN",
+        paymentMethod,
+        paymentAccountId:
+          paymentMethod !== "CASH" ? selectedAccountId : undefined,
       });
       setShowPayModal(false);
-      setPayAmount("");
       fetchSuppliers();
+      setPayAmount("");
+      setPaymentMethod("CASH");
+      setSelectedAccountId("");
     } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to process payment");
+      setError(err.response?.data?.message || "Payment failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -136,11 +162,16 @@ export default function SuppliersPage() {
     try {
       await api.post("/sales/clear-credit", {
         customerName: selectedCreditCustomer.name,
-        amount: Number(clearAmount),
+        amount: parseFloat(clearAmount),
+        paymentMethod,
+        paymentAccountId:
+          paymentMethod !== "CASH" ? selectedAccountId : undefined,
       });
       setShowClearModal(false);
-      setClearAmount("");
       fetchCreditCustomers();
+      setClearAmount("");
+      setPaymentMethod("CASH");
+      setSelectedAccountId("");
     } catch (err: any) {
       setError(err.response?.data?.message || "Failed to clear credit");
     } finally {
@@ -282,11 +313,13 @@ export default function SuppliersPage() {
                         onClick={() => {
                           setSelectedSupplier(supplier);
                           setPayAmount(supplier.balance.toString());
+                          setPaymentMethod("CASH");
+                          setSelectedAccountId("");
                           setShowPayModal(true);
                         }}
-                        className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
+                        className="flex-1 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-100 text-xs font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
                       >
-                        <Wallet size={14} />
+                        <Wallet size={16} />
                         Pay
                       </button>
                       <button
@@ -295,9 +328,9 @@ export default function SuppliersPage() {
                             `/reports?reportType=LEDGER&ledgerType=SUPPLIER&entityId=${supplier.id}`,
                           )
                         }
-                        className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
+                        className="flex-1 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
                       >
-                        <ArrowUpRight size={14} />
+                        <ArrowUpRight size={16} />
                         Ledger
                       </button>
                     </div>
@@ -368,7 +401,7 @@ export default function SuppliersPage() {
                     <button
                       onClick={() =>
                         router.push(
-                          `/reports?reportType=LEDGER&ledgerType=CUSTOMER&entityName=${encodeURIComponent(customer.name)}`,
+                          `/reports?reportType=LEDGER&ledgerType=CUSTOMER&entityId=${(customer as any).id}`,
                         )
                       }
                       className="flex-1 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 text-sm font-medium hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
@@ -483,6 +516,57 @@ export default function SuppliersPage() {
                   </p>
                 )}
 
+                <div className="space-y-4">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Payment Method
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "CASH", label: "Cash", icon: Banknote },
+                      { id: "CARD", label: "Card", icon: CreditCard },
+                      { id: "ONLINE", label: "Online", icon: Smartphone },
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id as any)}
+                        className={cn(
+                          "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
+                          paymentMethod === m.id
+                            ? "border-blue-600 bg-blue-600/10 text-blue-500"
+                            : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700",
+                        )}
+                      >
+                        <m.icon size={18} />
+                        <span className="text-[10px] font-bold">{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(paymentMethod === "CARD" || paymentMethod === "ONLINE") && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase">
+                      Select Account
+                    </label>
+                    <select
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600 appearance-none"
+                    >
+                      <option value="">Choose Account</option>
+                      {paymentAccounts
+                        .filter((acc) => acc.type === paymentMethod)
+                        .map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name}
+                            {acc.accountNumber ? ` (${acc.accountNumber})` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
                 {error && <p className="text-red-500 text-sm">{error}</p>}
 
                 <div className="flex gap-4 pt-4">
@@ -499,7 +583,8 @@ export default function SuppliersPage() {
                       isSubmitting ||
                       (parseFloat(payAmount) || 0) >
                         Number(selectedSupplier.balance) ||
-                      (parseFloat(payAmount) || 0) <= 0
+                      (parseFloat(payAmount) || 0) <= 0 ||
+                      (paymentMethod !== "CASH" && !selectedAccountId)
                     }
                     className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 shadow-lg shadow-blue-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -555,6 +640,57 @@ export default function SuppliersPage() {
                   </p>
                 )}
 
+                <div className="space-y-4">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Payment Method
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "CASH", label: "Cash", icon: Banknote },
+                      { id: "CARD", label: "Card", icon: CreditCard },
+                      { id: "ONLINE", label: "Online", icon: Smartphone },
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setPaymentMethod(m.id as any)}
+                        className={cn(
+                          "flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all",
+                          paymentMethod === m.id
+                            ? "border-indigo-600 bg-indigo-600/10 text-indigo-500"
+                            : "border-zinc-800 bg-zinc-900 text-zinc-500 hover:border-zinc-700",
+                        )}
+                      >
+                        <m.icon size={18} />
+                        <span className="text-[10px] font-bold">{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(paymentMethod === "CARD" || paymentMethod === "ONLINE") && (
+                  <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                    <label className="text-xs font-bold text-zinc-500 uppercase">
+                      Select Account
+                    </label>
+                    <select
+                      value={selectedAccountId}
+                      onChange={(e) => setSelectedAccountId(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-indigo-600 appearance-none"
+                    >
+                      <option value="">Choose Account</option>
+                      {paymentAccounts
+                        .filter((acc) => acc.type === paymentMethod)
+                        .map((acc) => (
+                          <option key={acc.id} value={acc.id}>
+                            {acc.name}
+                            {acc.accountNumber ? ` (${acc.accountNumber})` : ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+
                 {error && <p className="text-red-500 text-sm">{error}</p>}
 
                 <div className="flex gap-4 pt-4">
@@ -571,7 +707,8 @@ export default function SuppliersPage() {
                       isSubmitting ||
                       (parseFloat(clearAmount) || 0) >
                         Number(selectedCreditCustomer.amount) ||
-                      (parseFloat(clearAmount) || 0) <= 0
+                      (parseFloat(clearAmount) || 0) <= 0 ||
+                      (paymentMethod !== "CASH" && !selectedAccountId)
                     }
                     className="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

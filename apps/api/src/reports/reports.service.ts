@@ -922,7 +922,13 @@ export class ReportsService {
     const customer = await this.prisma.creditCustomer.findUnique({
       where: { id: customerId },
     });
-    if (!customer) throw new Error('Customer not found');
+    if (!customer) {
+      return {
+        customer: null,
+        ledger: [],
+        currentBalance: 0,
+      };
+    }
 
     // Calculate Opening Balance
     let runningBalance = 0;

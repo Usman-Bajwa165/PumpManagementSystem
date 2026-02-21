@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
 import {
@@ -32,14 +32,23 @@ type SalesViewMode =
   | "DETAILED_SALES";
 
 export default function ReportsPage() {
-  const [reportType, setReportType] = useState<ReportType>("PL");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const [reportType, setReportType] = useState<ReportType>(
+    (searchParams.get("reportType") as ReportType) || "PL",
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [data, setData] = useState<any>(null);
+
+  // Initialize dateRange from URL or default to last 30 days
   const [dateRange, setDateRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 30))
-      .toISOString()
-      .split("T")[0],
-    end: new Date().toISOString().split("T")[0],
+    start:
+      searchParams.get("startDate") ||
+      new Date(new Date().setDate(new Date().getDate() - 30))
+        .toISOString()
+        .split("T")[0],
+    end: searchParams.get("endDate") || new Date().toISOString().split("T")[0],
   });
 
   const formatDate = (date: any) => {
@@ -74,82 +83,122 @@ export default function ReportsPage() {
   };
 
   // Sales Specific States
-  const [salesViewMode, setSalesViewMode] =
-    useState<SalesViewMode>("DAILY_SUMMARY");
-  const [selectedShiftId, setSelectedShiftId] = useState("");
-  const [selectedNozzleId, setSelectedNozzleId] = useState("");
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [selectedPaymentType, setSelectedPaymentType] = useState("ALL");
+  const [salesViewMode, setSalesViewMode] = useState<SalesViewMode>(
+    (searchParams.get("salesViewMode") as SalesViewMode) || "DAILY_SUMMARY",
+  );
+  const [selectedShiftId, setSelectedShiftId] = useState(
+    searchParams.get("shiftId") || "",
+  );
+  const [selectedNozzleId, setSelectedNozzleId] = useState(
+    searchParams.get("nozzleId") || "",
+  );
+  const [selectedProductId, setSelectedProductId] = useState(
+    searchParams.get("productId") || "",
+  );
+  const [selectedPaymentType, setSelectedPaymentType] = useState(
+    searchParams.get("paymentType") || "ALL",
+  );
 
   // Purchase Specific States
-  const [purchaseSupplierId, setPurchaseSupplierId] = useState("");
-  const [purchasePaymentStatus, setPurchasePaymentStatus] = useState("ALL");
-  const [purchaseProductId, setPurchaseProductId] = useState("");
+  const [purchaseSupplierId, setPurchaseSupplierId] = useState(
+    searchParams.get("supplierId") || "",
+  );
+  const [purchasePaymentStatus, setPurchasePaymentStatus] = useState(
+    searchParams.get("paymentStatus") || "ALL",
+  );
+  const [purchaseProductId, setPurchaseProductId] = useState(
+    searchParams.get("purchaseProductId") || "",
+  );
 
   // Ledger Specific States
   const [ledgerType, setLedgerType] = useState<"SUPPLIER" | "CUSTOMER">(
-    "SUPPLIER",
+    (searchParams.get("ledgerType") as "SUPPLIER" | "CUSTOMER") || "SUPPLIER",
   );
-  const [selectedEntityId, setSelectedEntityId] = useState("");
-  const [showLogs, setShowLogs] = useState(false);
+  const [selectedEntityId, setSelectedEntityId] = useState(
+    searchParams.get("entityId") || "",
+  );
+  const [showLogs, setShowLogs] = useState(
+    searchParams.get("showLogs") === "true",
+  );
 
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  useEffect(() => {
-    const type = searchParams.get("reportType") as ReportType;
-    const entityId = searchParams.get("entityId");
-    const lType = searchParams.get("ledgerType") as "SUPPLIER" | "CUSTOMER";
-
-    if (type) setReportType(type);
-    if (entityId) {
-      setSelectedEntityId(entityId);
-      setShowLogs(true);
-    }
-    if (lType) setLedgerType(lType);
-
-    // Trigger fetch if all params are present
-    if (type && entityId && lType) {
-      setTimeout(() => fetchReport(), 100);
-    }
-  }, [searchParams]);
+  interface Shift {
+    id: string;
+    startTime: string;
+    opener?: {
+      username: string;
+    };
+  }
+  interface Nozzle {
+    id: string;
+    name: string;
+  }
+  interface Product {
+    id: string;
+    name: string;
+  }
+  interface Supplier {
+    id: string;
+    name: string;
+  }
+  interface Customer {
+    id: string;
+    name: string;
+  }
 
   // Metadata for filters
-  const [shifts, setShifts] = useState<any[]>([]);
-  const [nozzles, setNozzles] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [nozzles, setNozzles] = useState<Nozzle[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const fetchMetadata = async () => {
-    try {
-      const [shiftsRes, nozzlesRes, productsRes, suppliersRes, customersRes] =
-        await Promise.all([
-          api.get("/shifts"),
-          api.get("/inventory/nozzles"),
-          api.get("/inventory/products"),
-          api.get("/suppliers"),
-          api.get("/credit-customers"),
-        ]);
-      setShifts(shiftsRes.data);
-      setNozzles(nozzlesRes.data);
-      setProducts(productsRes.data);
-      setSuppliers(suppliersRes.data);
-      setCustomers(customersRes.data);
-    } catch (err) {
-      console.error("Failed to fetch metadata:", err);
-    }
-  };
-
+  // URL Synchronization
   useEffect(() => {
-    fetchMetadata();
-  }, []);
+    const params = new URLSearchParams();
+    params.set("reportType", reportType);
+    params.set("startDate", dateRange.start);
+    params.set("endDate", dateRange.end);
 
-  const fetchReport = async () => {
+    if (reportType === "SALES") {
+      params.set("salesViewMode", salesViewMode);
+      if (selectedShiftId) params.set("shiftId", selectedShiftId);
+      if (selectedNozzleId) params.set("nozzleId", selectedNozzleId);
+      if (selectedProductId) params.set("productId", selectedProductId);
+      params.set("paymentType", selectedPaymentType);
+    } else if (reportType === "PURCHASE") {
+      if (purchaseSupplierId) params.set("supplierId", purchaseSupplierId);
+      params.set("paymentStatus", purchasePaymentStatus);
+      if (purchaseProductId) params.set("purchaseProductId", purchaseProductId);
+    } else if (reportType === "LEDGER") {
+      params.set("ledgerType", ledgerType);
+      if (selectedEntityId) params.set("entityId", selectedEntityId);
+      params.set("showLogs", showLogs.toString());
+    }
+
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    router.replace(newUrl, { scroll: false });
+  }, [
+    reportType,
+    dateRange,
+    salesViewMode,
+    selectedShiftId,
+    selectedNozzleId,
+    selectedProductId,
+    selectedPaymentType,
+    purchaseSupplierId,
+    purchasePaymentStatus,
+    purchaseProductId,
+    ledgerType,
+    selectedEntityId,
+    showLogs,
+    router,
+  ]);
+
+  const fetchReport = useCallback(async () => {
     setIsLoading(true);
     try {
       let endpoint = "";
-      let params: any = {};
+      const params: any = {};
 
       if (dateRange.start) params.startDate = dateRange.start;
       if (dateRange.end) params.endDate = dateRange.end;
@@ -190,6 +239,11 @@ export default function ReportsPage() {
             ledgerType === "SUPPLIER"
               ? `/reports/ledger/supplier/${selectedEntityId}`
               : `/reports/ledger/customer/${selectedEntityId}`;
+          if (selectedEntityId === "ALL") {
+            setShowLogs(false);
+          } else {
+            setShowLogs(true);
+          }
           break;
       }
 
@@ -202,7 +256,45 @@ export default function ReportsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [
+    reportType,
+    dateRange,
+    salesViewMode,
+    selectedShiftId,
+    selectedNozzleId,
+    selectedProductId,
+    selectedPaymentType,
+    purchaseSupplierId,
+    purchasePaymentStatus,
+    purchaseProductId,
+    ledgerType,
+    selectedEntityId,
+  ]);
+
+  const fetchMetadata = useCallback(async () => {
+    try {
+      const [shiftsRes, nozzlesRes, productsRes, suppliersRes, customersRes] =
+        await Promise.all([
+          api.get("/shifts"),
+          api.get("/inventory/nozzles"),
+          api.get("/inventory/products"),
+          api.get("/suppliers"),
+          api.get("/credit-customers"),
+        ]);
+      setShifts(shiftsRes.data);
+      setNozzles(nozzlesRes.data);
+      setProducts(productsRes.data);
+      setSuppliers(suppliersRes.data);
+      // Only show customers with credit history
+      setCustomers(customersRes.data.filter((c: any) => c.id));
+    } catch (err) {
+      console.error("Failed to fetch metadata:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMetadata();
+  }, []);
 
   useEffect(() => {
     fetchReport();
@@ -219,6 +311,7 @@ export default function ReportsPage() {
     purchaseProductId,
     ledgerType,
     selectedEntityId,
+    fetchReport,
   ]);
 
   const tabs: { id: ReportType; label: string; icon: any }[] = [
@@ -391,10 +484,9 @@ export default function ReportsPage() {
       },
       alternateRowStyles: { fillColor: [250, 250, 250] },
       margin: { top: 45 },
-      didDrawPage: (data) => {
+      didDrawPage: (_data) => {
         // Footer on each page
-        const str =
-          "PPMS Secure Report | Page " + doc.internal.getNumberOfPages();
+        const str = "PPMS Secure Report | Page " + doc.getNumberOfPages();
         doc.setFontSize(7);
         doc.setTextColor(150);
         doc.text(str, 105, 285, { align: "center" });
@@ -637,7 +729,12 @@ export default function ReportsPage() {
                 <select
                   className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all min-w-[200px]"
                   value={selectedEntityId}
-                  onChange={(e) => setSelectedEntityId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedEntityId(e.target.value);
+                    if (e.target.value === "ALL") {
+                      setShowLogs(false);
+                    }
+                  }}
                 >
                   <option value="">Select Account...</option>
                   <option value="ALL"> [ ALL ] </option>
@@ -1211,38 +1308,31 @@ export default function ReportsPage() {
             {/* Ledger */}
             {reportType === "LEDGER" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => {
-                        setShowLogs(false);
-                        setSelectedEntityId("ALL");
-                      }}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                        !showLogs
-                          ? "bg-zinc-100 text-zinc-950"
-                          : "bg-zinc-900 text-zinc-500 hover:text-zinc-300",
-                      )}
-                    >
-                      Summary View
-                    </button>
-                    {selectedEntityId !== "ALL" && (
+                {selectedEntityId === "ALL" && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
                       <button
-                        onClick={() => setShowLogs(true)}
-                        className={cn(
-                          "px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                          showLogs
-                            ? "bg-zinc-100 text-zinc-950"
-                            : "bg-zinc-900 text-zinc-500 hover:text-zinc-300",
-                        )}
+                        className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-100 text-zinc-950"
                       >
-                        Detailed Logs
+                        Summary View
                       </button>
-                    )}
+                    </div>
                   </div>
+                )}
 
-                  {showLogs && selectedEntityId !== "ALL" && (
+                {selectedEntityId && selectedEntityId !== "ALL" && data && (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => {
+                          setSelectedEntityId("ALL");
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-900 text-zinc-500 hover:text-zinc-300"
+                      >
+                        ← Back to Summary
+                      </button>
+                    </div>
+
                     <div className="flex flex-col items-end">
                       <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tight">
                         {ledgerType === "SUPPLIER"
@@ -1251,71 +1341,85 @@ export default function ReportsPage() {
                       </h3>
                       <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
                         Current Balance: Rs.{" "}
-                        {data?.currentBalance?.toLocaleString()}
+                        {(data?.currentBalance || 0).toLocaleString()}
                       </p>
                     </div>
-                  )}
-                </div>
-
-                {!showLogs || selectedEntityId === "ALL" ? (
-                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
-                    <table className="w-full text-left text-sm text-zinc-400 border-collapse">
-                      <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
-                        <tr>
-                          <th className="px-6 py-5">
-                            {ledgerType === "SUPPLIER"
-                              ? "Supplier Name"
-                              : "Customer Name"}
-                          </th>
-                          <th className="px-6 py-5 text-right">Debit (OUT)</th>
-                          <th className="px-6 py-5 text-right text-emerald-500">
-                            Credit (IN)
-                          </th>
-                          <th className="px-6 py-5 text-right text-zinc-100">
-                            Net Balance
-                          </th>
-                          <th className="px-6 py-5 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900">
-                        {(data?.summary || []).map((item: any, i: number) => (
-                          <tr
-                            key={i}
-                            className="hover:bg-zinc-100/2 transition-colors"
-                          >
-                            <td className="px-6 py-5 font-bold text-zinc-100">
-                              {item.name}
-                            </td>
-                            <td className="px-6 py-5 text-right font-mono text-rose-400/80">
-                              {item.debit > 0
-                                ? item.debit.toLocaleString()
-                                : "-"}
-                            </td>
-                            <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
-                              {item.credit > 0
-                                ? item.credit.toLocaleString()
-                                : "-"}
-                            </td>
-                            <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
-                              Rs. {item.balance.toLocaleString()}
-                            </td>
-                            <td className="px-6 py-5 text-center">
-                              <button
-                                onClick={() => {
-                                  setSelectedEntityId(item.id);
-                                  setShowLogs(true);
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-400 hover:text-white hover:border-zinc-700 transition-all uppercase"
-                              >
-                                View Logs
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
                   </div>
-                ) : (
+                )}
+
+                {selectedEntityId === "ALL" ? (
+                  <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+                    <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                      <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                        <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                          <tr>
+                            <th className="px-6 py-5">
+                              {ledgerType === "SUPPLIER"
+                                ? "Supplier Name"
+                                : "Customer Name"}
+                            </th>
+                            <th className="px-6 py-5 text-right">Debit (OUT)</th>
+                            <th className="px-6 py-5 text-right text-emerald-500">
+                              Credit (IN)
+                            </th>
+                            <th className="px-6 py-5 text-right text-zinc-100">
+                              Net Balance
+                            </th>
+                            <th className="px-6 py-5 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900">
+                          {(data?.summary || []).map((item: any, i: number) => (
+                            <tr
+                              key={i}
+                              className="hover:bg-zinc-100/2 transition-colors"
+                            >
+                              <td className="px-6 py-5 font-bold text-zinc-100">
+                                {item.name}
+                              </td>
+                              <td className="px-6 py-5 text-right font-mono text-rose-400/80">
+                                {item.debit > 0
+                                  ? item.debit.toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
+                                {item.credit > 0
+                                  ? item.credit.toLocaleString()
+                                  : "-"}
+                              </td>
+                              <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                                Rs. {item.balance.toLocaleString()}
+                              </td>
+                              <td className="px-6 py-5 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setSelectedEntityId(item.id);
+                                      setShowLogs(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-400 hover:text-white hover:border-zinc-700 transition-all uppercase"
+                                  >
+                                    Logs
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(!data?.summary || data.summary.length === 0) && (
+                        <div className="py-20 text-center text-zinc-600">
+                          <p className="text-lg font-bold mb-2">
+                            No {ledgerType.toLowerCase()} records found
+                          </p>
+                          <p className="text-sm">
+                            Try adjusting your date range
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : selectedEntityId && selectedEntityId !== "ALL" ? (
                   <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
                     <div className="max-h-[600px] overflow-auto custom-scrollbar">
                       <table className="w-full text-left text-sm text-zinc-400 border-collapse">
@@ -1344,78 +1448,78 @@ export default function ReportsPage() {
                                 {formatDate(row.date)}
                               </td>
                               <td className="px-6 py-5">
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-zinc-100 font-bold">
-                                      {row.description}
-                                    </span>
-                                    <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
-                                      {row.type}
-                                    </span>
-                                  </div>
+                                  <div className="flex flex-col gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-zinc-100 font-bold">
+                                        {row.description}
+                                      </span>
+                                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
+                                        {row.type}
+                                      </span>
+                                    </div>
 
-                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
-                                    <span className="text-blue-400 font-black uppercase">
-                                      {ledgerType === "SUPPLIER"
-                                        ? row.supplierName
-                                        : row.customerName}
-                                    </span>
-                                    {row.details && (
-                                      <>
-                                        {ledgerType === "SUPPLIER" ? (
-                                          <>
-                                            <span className="text-zinc-500 italic">
-                                              Purchase Detail:{" "}
-                                              {row.details.quantity}L @ Rs.{" "}
-                                              {row.details.rate}
-                                            </span>
-                                            <span
-                                              className={cn(
-                                                "font-bold",
-                                                row.details.status === "PAID"
-                                                  ? "text-emerald-500"
-                                                  : "text-rose-500",
-                                              )}
-                                            >
-                                              Status: {row.details.status}{" "}
-                                              (Paid: Rs.{" "}
-                                              {(
-                                                row.details.paidAmount || 0
-                                              ).toLocaleString()}{" "}
-                                              | Rem: Rs.{" "}
-                                              {(
-                                                row.details.remainingAmount || 0
-                                              ).toLocaleString()}
-                                              )
-                                            </span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <span className="text-zinc-400 font-bold">
-                                              Vehicle:{" "}
-                                              {row.details.vehicleNumber ||
-                                                "N/A"}
-                                            </span>
-                                            <span className="text-zinc-500">
-                                              {row.details.product} (
-                                              {row.details.quantity}L)
-                                            </span>
-                                            <span className="text-zinc-600">
-                                              via{" "}
-                                              {row.details.nozzle || "Unknown"}
-                                            </span>
-                                            <span className="text-amber-500 font-bold">
-                                              {row.details.shift}
-                                            </span>
-                                            <span className="text-zinc-600 font-mono">
-                                              @ {row.details.time}
-                                            </span>
-                                          </>
-                                        )}
-                                      </>
-                                    )}
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
+                                      <span className="text-blue-400 font-black uppercase">
+                                        {ledgerType === "SUPPLIER"
+                                          ? row.supplierName
+                                          : row.customerName}
+                                      </span>
+                                      {row.details && (
+                                        <>
+                                          {ledgerType === "SUPPLIER" ? (
+                                            <>
+                                              <span className="text-zinc-500 italic">
+                                                Purchase Detail:{" "}
+                                                {row.details.quantity}L @ Rs.{" "}
+                                                {row.details.rate}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "font-bold",
+                                                  row.details.status === "PAID"
+                                                    ? "text-emerald-500"
+                                                    : "text-rose-500",
+                                                )}
+                                              >
+                                                Status: {row.details.status}{" "}
+                                                (Paid: Rs.{" "}
+                                                {(
+                                                  row.details.paidAmount || 0
+                                                ).toLocaleString()}{" "}
+                                                | Rem: Rs.{" "}
+                                                {(
+                                                  row.details.remainingAmount || 0
+                                                ).toLocaleString()}
+                                                )
+                                              </span>
+                                            </>
+                                          ) : (
+                                            <>
+                                              <span className="text-zinc-400 font-bold">
+                                                Vehicle:{" "}
+                                                {row.details.vehicleNumber ||
+                                                  "N/A"}
+                                              </span>
+                                              <span className="text-zinc-500">
+                                                {row.details.product} (
+                                                {row.details.quantity}L)
+                                              </span>
+                                              <span className="text-zinc-600">
+                                                via{" "}
+                                                {row.details.nozzle || "Unknown"}
+                                              </span>
+                                              <span className="text-amber-500 font-bold">
+                                                {row.details.shift}
+                                              </span>
+                                              <span className="text-zinc-600 font-mono">
+                                                @ {row.details.time}
+                                              </span>
+                                            </>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
                               </td>
                               <td className="px-6 py-5 text-right font-mono text-rose-400/80">
                                 {row.debit > 0
@@ -1441,7 +1545,7 @@ export default function ReportsPage() {
                       </table>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
             )}
 

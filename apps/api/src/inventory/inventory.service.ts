@@ -113,15 +113,34 @@ export class InventoryService {
         const paid =
           dto.paymentStatus === 'PAID' ? dto.cost : dto.paidAmount || 0;
 
+        const method = dto.paymentMethod || 'CASH';
+        const creditCode = method === 'CASH' ? '10101' : '10201';
+
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+        const timeStr = now
+          .toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+          .replace(/\s/g, '');
+        const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
+
         // Credit Cash (Asset) -> Decreases
         await this.accountingService.createTransaction(
           {
             debitCode: '10401', // Inventory
-            creditCode: '10101', // Cash
+            creditCode, // Cash or Bank
             amount: paid,
-            description: `Purchase Payment (Stock) for ${tank.name}`,
+            description: `Purchase Payment - ${supplier?.name || tank.name} - ${method} - ${formattedDateTime}`,
             shiftId: null, // Admin action
             supplierId: dto.supplierId,
+            paymentAccountId: dto.paymentAccountId,
           },
           tx,
         ); // Pass tx
@@ -136,13 +155,28 @@ export class InventoryService {
           data: { balance: { increment: remainingToPay } },
         });
 
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        });
+        const timeStr = now
+          .toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          })
+          .replace(/\s/g, '');
+        const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
+
         // Create Accounting Entry
         await this.accountingService.createTransaction(
           {
             debitCode: '10401', // Inventory
             creditCode: '20101', // Accounts Payable
             amount: remainingToPay,
-            description: `Credit Purchase from ${supplier?.name}`,
+            description: `Credit Purchase - ${supplier?.name} - ${formattedDateTime}`,
             supplierId: dto.supplierId,
           },
           tx,
@@ -152,8 +186,6 @@ export class InventoryService {
     });
 
     // Notifications (keep existing logic outside transaction for speed or inside for consistency, outside is fine)
-    // ... (omitted for brevity, assume kept or re-added if whole block replaced)
-    // Re-adding notification logic helper
     this.notifyPurchase(userId, dto, tank, newStock).catch(console.error);
 
     return {
