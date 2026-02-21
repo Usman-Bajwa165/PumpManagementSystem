@@ -6,6 +6,9 @@
   "scripts": {
     "predev": "npx kill-port 3000 3001",
     "dev": "node scripts/dev.js",
+    "build": "npm run build --workspaces",
+    "start": "pm2 start ecosystem.config.js",
+    "stop": "pm2 stop all && pm2 delete all",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "test": "echo \"Error: no test specified\" && exit 1"

@@ -1,98 +1,43 @@
 # Petrol Pump Management System
 
-A professional, full-stack management solution tailored for petrol stations in the Pakistani market. Built with a focus on double-entry accounting compliance, visual inventory tracking, and robust shift management.
+A professional petrol station management solution for the Pakistani market.
 
-## 🚀 Quick Start
+## 🚀 Quick Setup
 
-```bash
-# Windows
-setup.bat
+**Windows:** See [SETUP-WINDOWS.md](./SETUP-WINDOWS.md)  
+**Mac:** See [SETUP-MAC.md](./SETUP-MAC.md)  
+**Client Deployment:** See [CLIENT-DEPLOYMENT.md](./CLIENT-DEPLOYMENT.md)
 
-# macOS/Linux
-chmod +x setup.sh && ./setup.sh
+## 🔐 Default Login
+- **Username:** admin
+- **Password:** admin123
 
-# Start application
-npm run dev
-```
-
-**Access:** http://localhost:3000  
-**Login:** admin / admin123
-
-📚 **[Quick Start Guide](./QUICKSTART.md)** | 📖 **[Complete Documentation](./WORKFLOW.md)**
-
-## 🚀 Technical Stack
-
-- **Monorepo**: Managed via NPM Workspaces.
-- **Backend**: NestJS (TypeScript) with JWT/RBAC security.
-- **Frontend**: Next.js 16 (Turbopack) with "Industrial Sleek" dark-mode UI.
-- **Database**: PostgreSQL 16 managed via Prisma ORM.
-- **Process Management**: PM2 configuration for high availability.
-- **Integration**: WhatsApp notifications via `whatsapp-web.js`.
-
-## 📂 Project Structure
-
-- `apps/api`: NestJS Backend API.
-- `apps/web`: Next.js Frontend Dashboard.
-- `ecosystem.config.js`: PM2 configuration for production deployment.
-- `docker-compose.yml`: Database and infrastructure setup.
-
-## 🛠️ Installation & Setup
-
-### 1. Prerequisites
-
-- Node.js (v20+)
-- Docker Desktop
-
-### 2. Environment Configuration
-
-Create `.env` files in both `apps/api` and `apps/web`.
-
-### 3. Install Dependencies
-
-**IMPORTANT:** Run from the ROOT directory:
+## 🛠️ For Developers
 
 ```bash
-# From Pump/ directory
+# Install dependencies
 npm install
-```
 
-This installs dependencies for the entire monorepo (API + Web).
-
-### 4. Running the Application (Development)
-
-The entire stack (Docker Database, API, and Frontend) can be started with a single command from the root:
-
-```bash
+# Start development
 npm run dev
 ```
 
-### 5. Production Mode
+**Access:** http://localhost:3000
 
-```bash
-# Build both apps
-npm run build
+## 🚀 Tech Stack
+- **Backend:** NestJS + PostgreSQL
+- **Frontend:** Next.js 16
+- **Database:** Docker PostgreSQL
+- **Auth:** JWT with role-based access
 
-# Start with PM2 (requires global pm2)
-pm2 start ecosystem.config.js
-```
-
-## 📚 Complete Documentation
-
-For detailed workflows, user guides, and technical architecture, see:
-
-👉 **[WORKFLOW.md](./WORKFLOW.md)** - Complete system documentation
-
-## ✅ Verified Features
-
-- [x] **Secure Auth**: Role-based access for Managers and Operators.
-- [x] **Live Dashboard**: Real-time sales, credit tracking, and stock alerts.
-- [x] **Shift Control**: Validated reading entries and automated variance reports.
-- [x] **Accounting**: Automated General Ledger entries for every transaction.
-- [x] **Inventory**: Visual gauges and physical dip adjustment.
-- [x] **WhatsApp**: QR-based authentication and real-time notifications.
-- [x] **Backups**: Automated PDF backups every 12 hours to Documents/iCloud (Auto_DDMMYY_D/N naming).
-- [x] **Timezone**: All records in Pakistani timezone (Asia/Karachi).
+## ✅ Features
+- Secure authentication
+- Real-time dashboard
+- Shift management
+- Inventory tracking
+- Automated accounting
+- WhatsApp notifications
+- PDF backups
 
 ---
-
-© 2026 Petrol Pump Management System. All Rights Reserved.
+© 2026 Petrol Pump Management System
