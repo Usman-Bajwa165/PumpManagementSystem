@@ -1452,9 +1452,11 @@ export default function ReportsPage() {
                                 ? "Supplier Name"
                                 : "Customer Name"}
                             </th>
-                            <th className="px-6 py-5 text-right">Debit (Paid)</th>
+                            <th className="px-6 py-5 text-right">
+                            {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Received)"}
+                            </th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                              Credit (Purchased)
+                            {ledgerType === "SUPPLIER" ? "Credit (Purchased)" : "Debit (Purchased)"}
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
                               {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}
@@ -1554,10 +1556,10 @@ export default function ReportsPage() {
                             <th className="px-6 py-5">Date</th>
                             <th className="px-6 py-5">Flow Description</th>
                             <th className="px-6 py-5 text-right">
-                              {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Purchased)"}
+                              {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Received)"}
                             </th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                              {ledgerType === "SUPPLIER" ? "Debit (Payments)" : "Credit (Sales)"}
+                              {ledgerType === "SUPPLIER" ? "Credit (Payments)" : "Debit (Purchased)"}
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
                               {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}

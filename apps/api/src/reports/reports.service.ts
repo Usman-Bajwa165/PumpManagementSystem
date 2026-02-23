@@ -666,18 +666,18 @@ export class ReportsService {
             const totalCost = Number(p.totalCost);
             const paidAmount = Number(p.paidAmount || 0);
             const unpaidAmount = totalCost - paidAmount;
-            
+
             // Add total purchase amount to credit (total purchased)
             totalSupplierCredit += totalCost;
             // Add immediate payment to debit
             totalSupplierDebit += paidAmount;
-            
+
             return {
               date: p.date,
               type: 'PURCHASE',
               description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
-              debit: paidAmount, // What we paid immediately
-              credit: unpaidAmount, // What we still owe
+              debit: paidAmount,
+              credit: totalCost,
               refId: p.id,
               supplierName: supplier.name,
               details: {
@@ -691,13 +691,14 @@ export class ReportsService {
             };
           }),
           ...transactions.map((t) => {
-            totalSupplierDebit += Number(t.amount); // Payments are DEBIT (what we paid)
+            totalSupplierDebit += Number(t.amount);
             return {
               date: t.createdAt,
               type: 'PAYMENT',
               description: t.description || `Payment to ${supplier.name}`,
               debit: Number(t.amount),
-              credit: 0,
+              credit: Number(t.amount),
+              staticPayable: Number(t.quantity || 0), // Stored payable after payment
               refId: t.id,
               supplierName: supplier.name,
             };
@@ -706,15 +707,10 @@ export class ReportsService {
           (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
 
-        // Apply running balance to sorted records
-        const recordsWithBalance = sorted.map((r) => {
-          if (r.type === 'PURCHASE') {
-            runningBalance += r.credit; // Add unpaid amount
-            runningBalance -= r.debit;  // Subtract immediate payment
-          } else {
-            runningBalance -= r.debit;  // Subtract payment
-          }
-          return { ...r, runningBalance };
+        // Professional ledger: All rows show current supplier balance
+        const currentBalance = Number(supplier.balance);
+        const recordsWithBalance = sorted.map((r: any) => {
+          return { ...r, runningBalance: currentBalance };
         });
 
         allLedger.push(...recordsWithBalance);
@@ -782,13 +778,13 @@ export class ReportsService {
         const totalCost = Number(p.totalCost);
         const paidAmount = Number(p.paidAmount || 0);
         const unpaidAmount = totalCost - paidAmount;
-        
+
         return {
           date: p.date,
           type: 'PURCHASE',
           description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
-          debit: paidAmount, // What we paid immediately
-          credit: unpaidAmount, // What we still owe
+          debit: paidAmount,
+          credit: totalCost,
           refId: p.id,
           supplierName: supplier.name,
           details: {
@@ -806,20 +802,17 @@ export class ReportsService {
         type: 'PAYMENT',
         description: t.description || `Payment to ${supplier.name}`,
         debit: Number(t.amount),
-        credit: 0,
+        credit: Number(t.amount),
+        staticPayable: Number(t.quantity || 0), // Stored payable after payment
         refId: t.id,
         supplierName: supplier.name,
       })),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-    const ledger = sorted.map((r) => {
-      if (r.type === 'PURCHASE') {
-        runningBalance += r.credit; // Add unpaid amount
-        runningBalance -= r.debit;  // Subtract immediate payment
-      } else {
-        runningBalance -= r.debit;  // Subtract payment
-      }
-      return { ...r, runningBalance };
+    // Professional ledger: All rows show current supplier balance
+    const currentBalance = Number(supplier.balance);
+    const ledger = sorted.map((r: any) => {
+      return { ...r, runningBalance: currentBalance };
     });
 
     return {
@@ -1376,8 +1369,8 @@ export class ReportsService {
       .text('Transaction History', 40);
     doc.moveDown(0.5);
 
-    const dateWidth = 90;
-    const descWidth = 210;
+    const dateWidth = type === 'customer' ? 80 : 90;
+    const descWidth = type === 'customer' ? 250 : 250;
     const debitWidth = 60;
     const creditWidth = 60;
     const balanceWidth = 60;
