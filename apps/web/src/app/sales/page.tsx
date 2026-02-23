@@ -29,6 +29,8 @@ export default function SalesPage() {
   >("CASH");
   const [customerName, setCustomerName] = useState("");
   const [vehicleNumber, setVehicleNumber] = useState("");
+  const [customerContact, setCustomerContact] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [description, setDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shiftOpen, setShiftOpen] = useState(false);
@@ -40,6 +42,12 @@ export default function SalesPage() {
   const [creditCustomers, setCreditCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState("");
   const [maxPayable, setMaxPayable] = useState(0);
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [regularCustomerSearch, setRegularCustomerSearch] = useState("");
+  const [showRegularCustomerDropdown, setShowRegularCustomerDropdown] = useState(false);
+  const [selectedDropdownIndex, setSelectedDropdownIndex] = useState(-1);
+  const [regularSelectedDropdownIndex, setRegularSelectedDropdownIndex] = useState(-1);
   const toast = useToast();
 
   const firstFieldRef = useRef<HTMLSelectElement>(null);
@@ -52,6 +60,18 @@ export default function SalesPage() {
   const vehicleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.customer-dropdown')) {
+        setShowCustomerDropdown(false);
+        setShowRegularCustomerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     firstFieldRef.current?.focus();
@@ -195,10 +215,10 @@ export default function SalesPage() {
       return;
     }
 
-    if (paymentMethod === "CREDIT" && (!customerName || !vehicleNumber)) {
+    if (paymentMethod === "CREDIT" && (!customerName || !vehicleNumber || !customerContact)) {
       toast.warning(
         "Details Required",
-        "Customer name and vehicle number required for credit",
+        "Customer name, vehicle number, and contact required for credit",
       );
       return;
     }
@@ -232,6 +252,8 @@ export default function SalesPage() {
         paymentAccountId: selectedAccount || undefined,
         customerName: customerName || undefined,
         vehicleNumber: vehicleNumber || undefined,
+        customerContact: customerContact || undefined,
+        customerEmail: customerEmail || undefined,
         description,
       });
       toast.success("Sale Recorded", "Transaction completed successfully!");
@@ -245,6 +267,8 @@ export default function SalesPage() {
       setQuantity("");
       setCustomerName("");
       setVehicleNumber("");
+      setCustomerContact("");
+      setCustomerEmail("");
       setSelectedAccount("");
       setDescription("");
       setSelectedNozzle("");
@@ -360,26 +384,75 @@ export default function SalesPage() {
                   <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
                     Select Customer <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    ref={firstFieldRef}
-                    required
-                    value={selectedCustomer}
-                    onChange={(e) => setSelectedCustomer(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && selectedCustomer) {
-                        e.preventDefault();
-                        amountRef.current?.focus();
-                      }
-                    }}
-                    className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600 appearance-none"
-                  >
-                    <option value="">Choose Customer</option>
-                    {creditCustomers.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name} - Remaining: Rs. {c.amount.toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative customer-dropdown">
+                    <input
+                      ref={firstFieldRef as any}
+                      type="text"
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDropdown(true);
+                        setSelectedDropdownIndex(-1);
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      onKeyDown={(e) => {
+                        if (!showCustomerDropdown) return;
+                        const filteredCustomers = customerSearch
+                          ? creditCustomers.filter((c) =>
+                              c.name.toLowerCase().includes(customerSearch.toLowerCase())
+                            )
+                          : creditCustomers;
+                        
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setSelectedDropdownIndex((prev) =>
+                            prev < filteredCustomers.length - 1 ? prev + 1 : prev
+                          );
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setSelectedDropdownIndex((prev) => (prev > -1 ? prev - 1 : -1));
+                        } else if (e.key === "Enter" && selectedDropdownIndex >= 0) {
+                          e.preventDefault();
+                          const selected = filteredCustomers[selectedDropdownIndex];
+                          setSelectedCustomer(selected.name);
+                          setCustomerSearch(selected.name);
+                          setShowCustomerDropdown(false);
+                          setSelectedDropdownIndex(-1);
+                          amountRef.current?.focus();
+                        }
+                      }}
+                      placeholder="Search customer..."
+                      className="w-full bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 py-4 text-zinc-100 focus:border-red-600 focus:bg-zinc-900 outline-none transition-all placeholder:text-zinc-600"
+                    />
+                    {showCustomerDropdown && (
+                      <div className="absolute z-50 w-full mt-2 max-h-60 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl">
+                        {(customerSearch
+                          ? creditCustomers.filter((c) =>
+                              c.name.toLowerCase().includes(customerSearch.toLowerCase())
+                            )
+                          : creditCustomers
+                        ).map((c, idx) => (
+                          <button
+                            key={c.name}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCustomer(c.name);
+                              setCustomerSearch(c.name);
+                              setShowCustomerDropdown(false);
+                              setSelectedDropdownIndex(-1);
+                              amountRef.current?.focus();
+                            }}
+                            className={cn(
+                              "w-full text-left px-4 py-3 hover:bg-zinc-800 text-zinc-300 text-sm border-b border-zinc-800 last:border-0",
+                              selectedDropdownIndex === idx && "bg-zinc-800"
+                            )}
+                          >
+                            {c.name} - Remaining: Rs. {c.amount.toLocaleString()}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="space-y-3">
@@ -718,29 +791,132 @@ export default function SalesPage() {
                           Existing Customer{" "}
                           <span className="text-zinc-700">(Optional)</span>
                         </label>
-                        <select
-                          value={customerName}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            const selected = creditCustomers.find(
-                              (c) => c.name === val,
-                            );
-                            setCustomerName(val);
-                            if (selected?.vehicle) {
-                              setVehicleNumber(selected.vehicle);
-                            } else if (!val) {
-                              setVehicleNumber("");
-                            }
-                          }}
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-300 focus:border-red-600 outline-none transition-all"
-                        >
-                          <option value="">New Customer</option>
-                          {creditCustomers.map((c) => (
-                            <option key={c.name} value={c.name}>
-                              {c.name} {c.vehicle ? `(${c.vehicle})` : ""}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="relative customer-dropdown">
+                          <input
+                            type="text"
+                            value={regularCustomerSearch}
+                            onChange={(e) => {
+                              setRegularCustomerSearch(e.target.value);
+                              setShowRegularCustomerDropdown(true);
+                              setRegularSelectedDropdownIndex(-1);
+                            }}
+                            onFocus={() => setShowRegularCustomerDropdown(true)}
+                            onBlur={() => {
+                              // Auto-fill "New Customer" if field is empty
+                              if (!regularCustomerSearch.trim()) {
+                                setRegularCustomerSearch("New Customer");
+                                setCustomerName("New Customer");
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (!showRegularCustomerDropdown) return;
+                              const filteredCustomers = regularCustomerSearch
+                                ? creditCustomers.filter((c) =>
+                                    c.name.toLowerCase().includes(regularCustomerSearch.toLowerCase())
+                                  )
+                                : creditCustomers;
+                              const showNewCustomer = !regularCustomerSearch;
+                              const totalOptions = showNewCustomer ? filteredCustomers.length + 1 : filteredCustomers.length;
+                              
+                              if (e.key === "ArrowDown") {
+                                e.preventDefault();
+                                setRegularSelectedDropdownIndex((prev) =>
+                                  prev < totalOptions - 1 ? prev + 1 : prev
+                                );
+                              } else if (e.key === "ArrowUp") {
+                                e.preventDefault();
+                                setRegularSelectedDropdownIndex((prev) => (prev > 0 ? prev - 1 : 0));
+                              } else if (e.key === "Enter" && regularSelectedDropdownIndex >= 0) {
+                                e.preventDefault();
+                                if (showNewCustomer && regularSelectedDropdownIndex === 0) {
+                                  // New Customer selected
+                                  setRegularCustomerSearch("New Customer");
+                                  setShowRegularCustomerDropdown(false);
+                                  setCustomerName("New Customer");
+                                  setVehicleNumber("");
+                                  setCustomerContact("");
+                                  setCustomerEmail("");
+                                  setRegularSelectedDropdownIndex(-1);
+                                } else {
+                                  const idx = showNewCustomer ? regularSelectedDropdownIndex - 1 : regularSelectedDropdownIndex;
+                                  const selected = filteredCustomers[idx];
+                                  setRegularCustomerSearch(selected.name);
+                                  setShowRegularCustomerDropdown(false);
+                                  setCustomerName("");
+                                  setVehicleNumber("");
+                                  setCustomerContact("");
+                                  setCustomerEmail("");
+                                  if (selected) {
+                                    setCustomerName(selected.name);
+                                    if (selected.vehicle) setVehicleNumber(selected.vehicle);
+                                    if (selected.contact) setCustomerContact(selected.contact);
+                                    if (selected.email) setCustomerEmail(selected.email);
+                                  }
+                                  setRegularSelectedDropdownIndex(-1);
+                                }
+                              }
+                            }}
+                            placeholder="Search or type new customer..."
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-300 focus:border-red-600 outline-none transition-all"
+                          />
+                          {showRegularCustomerDropdown && (
+                            <div className="absolute z-50 w-full mt-2 max-h-60 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl">
+                              {!regularCustomerSearch && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setRegularCustomerSearch("New Customer");
+                                    setShowRegularCustomerDropdown(false);
+                                    setCustomerName("New Customer");
+                                    setVehicleNumber("");
+                                    setCustomerContact("");
+                                    setCustomerEmail("");
+                                    setRegularSelectedDropdownIndex(-1);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-4 py-3 hover:bg-zinc-800 text-emerald-400 text-sm border-b border-zinc-800 font-bold",
+                                    regularSelectedDropdownIndex === 0 && "bg-zinc-800"
+                                  )}
+                                >
+                                  + New Customer
+                                </button>
+                              )}
+                              {(regularCustomerSearch
+                                ? creditCustomers.filter((c) =>
+                                    c.name.toLowerCase().includes(regularCustomerSearch.toLowerCase())
+                                  )
+                                : creditCustomers
+                              ).map((c, idx) => (
+                                <button
+                                  key={c.name}
+                                  type="button"
+                                  onClick={() => {
+                                    const selected = c;
+                                    setRegularCustomerSearch(c.name);
+                                    setShowRegularCustomerDropdown(false);
+                                    setCustomerName("");
+                                    setVehicleNumber("");
+                                    setCustomerContact("");
+                                    setCustomerEmail("");
+                                    if (selected) {
+                                      setCustomerName(selected.name);
+                                      if (selected.vehicle) setVehicleNumber(selected.vehicle);
+                                      if (selected.contact) setCustomerContact(selected.contact);
+                                      if (selected.email) setCustomerEmail(selected.email);
+                                    }
+                                    setRegularSelectedDropdownIndex(-1);
+                                  }}
+                                  className={cn(
+                                    "w-full text-left px-4 py-3 hover:bg-zinc-800 text-zinc-300 text-sm border-b border-zinc-800 last:border-0",
+                                    regularSelectedDropdownIndex === (regularCustomerSearch ? idx : idx + 1) && "bg-zinc-800"
+                                  )}
+                                >
+                                  {c.name} {c.vehicle ? `(${c.vehicle})` : ""}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                     <div className="space-y-3">
@@ -788,13 +964,59 @@ export default function SalesPage() {
                         onKeyDown={(e) => {
                           if (e.key === "Enter") {
                             e.preventDefault();
-                            descriptionRef.current?.focus();
+                            if (paymentMethod === "CREDIT") {
+                              document.getElementById("customerContact")?.focus();
+                            } else {
+                              descriptionRef.current?.focus();
+                            }
                           }
                         }}
                         className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-700"
                         placeholder="e.g., ABC-123"
                       />
                     </div>
+                    {paymentMethod === "CREDIT" && (
+                      <>
+                        <div className="space-y-3">
+                          <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                            Contact Number <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            id="customerContact"
+                            type="text"
+                            value={customerContact}
+                            onChange={(e) => setCustomerContact(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                document.getElementById("customerEmail")?.focus();
+                              }
+                            }}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-700"
+                            placeholder="e.g., +92 300 1234567"
+                          />
+                        </div>
+                        <div className="space-y-3">
+                          <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                            Email <span className="text-zinc-700">(Optional)</span>
+                          </label>
+                          <input
+                            id="customerEmail"
+                            type="email"
+                            value={customerEmail}
+                            onChange={(e) => setCustomerEmail(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                descriptionRef.current?.focus();
+                              }
+                            }}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 focus:border-red-600 outline-none transition-all placeholder:text-zinc-700"
+                            placeholder="customer@example.com"
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 

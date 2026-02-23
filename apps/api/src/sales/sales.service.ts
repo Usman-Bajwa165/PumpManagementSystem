@@ -113,6 +113,8 @@ export class SalesService {
               data: {
                 name: dto.customerName,
                 vehicleNumber: dto.vehicleNumber,
+                contact: dto.customerContact,
+                email: dto.customerEmail,
                 totalCredit: dto.amount,
               },
             });
@@ -122,6 +124,8 @@ export class SalesService {
               data: {
                 totalCredit: { increment: dto.amount },
                 vehicleNumber: dto.vehicleNumber || customer.vehicleNumber,
+                contact: dto.customerContact || customer.contact,
+                email: dto.customerEmail || customer.email,
               },
             });
           }
@@ -264,6 +268,8 @@ export class SalesService {
         select: {
           name: true,
           vehicleNumber: true,
+          contact: true,
+          email: true,
           totalCredit: true,
         },
       })
@@ -271,6 +277,8 @@ export class SalesService {
         customers.map((c) => ({
           name: c.name,
           vehicle: c.vehicleNumber,
+          contact: c.contact,
+          email: c.email,
           amount: Number(c.totalCredit),
         })),
       );

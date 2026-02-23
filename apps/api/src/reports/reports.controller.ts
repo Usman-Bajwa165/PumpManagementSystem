@@ -1,9 +1,10 @@
-import { Controller, Get, Query, UseGuards, Param } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Param, Res } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { Response } from 'express';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('reports')
@@ -100,11 +101,13 @@ export class ReportsController {
     @Param('id') id: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('month') month?: string,
   ) {
     return this.reportsService.getSupplierLedger(
       id,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
+      month,
     );
   }
 
@@ -114,11 +117,13 @@ export class ReportsController {
     @Param('id') id: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('month') month?: string,
   ) {
     return this.reportsService.getCustomerLedger(
       id,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
+      month,
     );
   }
 
@@ -126,5 +131,18 @@ export class ReportsController {
   @Get('trial-balance')
   getTrialBalance() {
     return this.reportsService.getTrialBalance();
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('invoice/:type/:id')
+  async generateInvoice(
+    @Param('type') type: string,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const pdfBuffer = await this.reportsService.generateInvoice(type, id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${id}.pdf`);
+    res.send(pdfBuffer);
   }
 }

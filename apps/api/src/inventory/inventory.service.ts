@@ -89,30 +89,25 @@ export class InventoryService {
         data: { currentStock: { increment: dto.quantity } },
       });
 
-      // 2. Create Purchase Record
-      await tx.purchase.create({
+      // 2. Create Purchase Record (always start as UNPAID with paidAmount = 0)
+      const purchase = await tx.purchase.create({
         data: {
           tankId: dto.tankId,
-          supplierId: dto.supplierId!, // Assert non-null since we checked
+          supplierId: dto.supplierId!,
           quantity: dto.quantity,
           totalCost: dto.cost,
           rate: rate,
-          status: (dto.paymentStatus as any) || 'UNPAID',
+          paidAmount: 0,
+          status: 'UNPAID',
         },
       });
 
-      // 3. Accounting
-      // Debit Inventory (Asset)
-      // Code 10401
+      // 3. Handle Payment (if any)
+      const paidAmount = 
+        dto.paymentStatus === 'PAID' ? dto.cost : 
+        dto.paymentStatus === 'PARTIAL' ? (dto.paidAmount || 0) : 0;
 
-      let remainingToPay = dto.cost;
-      if (
-        dto.paymentStatus === 'PAID' ||
-        (dto.paymentStatus === 'PARTIAL' && (dto.paidAmount ?? 0) > 0)
-      ) {
-        const paid =
-          dto.paymentStatus === 'PAID' ? dto.cost : dto.paidAmount || 0;
-
+      if (paidAmount > 0) {
         const method = dto.paymentMethod || 'CASH';
         const creditCode = method === 'CASH' ? '10101' : '10201';
 
@@ -131,23 +126,33 @@ export class InventoryService {
           .replace(/\s/g, '');
         const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
 
-        // Credit Cash (Asset) -> Decreases
+        // Create payment transaction
         await this.accountingService.createTransaction(
           {
             debitCode: '10401', // Inventory
             creditCode, // Cash or Bank
-            amount: paid,
+            amount: paidAmount,
             description: `Purchase Payment - ${supplier?.name || tank.name} - ${method} - ${formattedDateTime}`,
-            shiftId: null, // Admin action
+            shiftId: null,
             supplierId: dto.supplierId,
             paymentAccountId: dto.paymentAccountId,
           },
           tx,
-        ); // Pass tx
+        );
 
-        remainingToPay -= paid;
+        // Update purchase with payment
+        const newStatus = paidAmount >= dto.cost ? 'PAID' : 'PARTIAL';
+        await tx.purchase.update({
+          where: { id: purchase.id },
+          data: {
+            paidAmount: paidAmount,
+            status: newStatus,
+          },
+        });
       }
 
+      // 4. Handle unpaid amount (add to supplier balance)
+      const remainingToPay = dto.cost - paidAmount;
       if (remainingToPay > 0 && dto.supplierId) {
         // Update Supplier Balance
         await tx.supplier.update({
@@ -170,7 +175,7 @@ export class InventoryService {
           .replace(/\s/g, '');
         const formattedDateTime = `On: ${dateStr}, ${timeStr}`;
 
-        // Create Accounting Entry
+        // Create Accounting Entry for unpaid portion
         await this.accountingService.createTransaction(
           {
             debitCode: '10401', // Inventory

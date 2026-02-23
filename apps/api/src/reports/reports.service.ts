@@ -604,7 +604,17 @@ export class ReportsService {
     supplierId: string,
     startDate?: Date,
     endDate?: Date,
+    month?: string,
   ) {
+    // If month is provided, set date range for that month
+    if (month) {
+      const [year, monthNum] = month.split('-').map(Number);
+      startDate = new Date(year, monthNum - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(year, monthNum, 0);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
@@ -616,7 +626,7 @@ export class ReportsService {
       let totalBalance = 0;
 
       for (const supplier of suppliers) {
-        // Calculate Opening Balance (everything before startDate)
+        // Calculate opening balance up to startDate
         let runningBalance = 0;
         let totalSupplierDebit = 0;
         let totalSupplierCredit = 0;
@@ -646,33 +656,42 @@ export class ReportsService {
           where: {
             supplierId: supplier.id,
             createdAt: { gte: startDate, lte: adjustedEnd },
+            debitAccount: { code: '20101' }, // Only actual payments (Accounts Payable debit)
           },
           include: { debitAccount: true, creditAccount: true },
         });
 
         const sorted = [
           ...purchases.map((p: any) => {
-            totalSupplierCredit += Number(p.totalCost);
+            const totalCost = Number(p.totalCost);
+            const paidAmount = Number(p.paidAmount || 0);
+            const unpaidAmount = totalCost - paidAmount;
+            
+            // Add total purchase amount to credit (total purchased)
+            totalSupplierCredit += totalCost;
+            // Add immediate payment to debit
+            totalSupplierDebit += paidAmount;
+            
             return {
               date: p.date,
               type: 'PURCHASE',
               description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
-              debit: 0,
-              credit: Number(p.totalCost),
+              debit: paidAmount, // What we paid immediately
+              credit: unpaidAmount, // What we still owe
               refId: p.id,
               supplierName: supplier.name,
               details: {
                 quantity: Number(p.quantity),
                 rate: Number(p.rate),
-                totalCost: Number(p.totalCost),
-                paidAmount: Number(p.paidAmount),
-                remainingAmount: Number(p.totalCost) - Number(p.paidAmount),
+                totalCost: totalCost,
+                paidAmount: paidAmount,
+                remainingAmount: unpaidAmount,
                 status: p.status,
               },
             };
           }),
           ...transactions.map((t) => {
-            totalSupplierDebit += Number(t.amount);
+            totalSupplierDebit += Number(t.amount); // Payments are DEBIT (what we paid)
             return {
               date: t.createdAt,
               type: 'PAYMENT',
@@ -689,17 +708,23 @@ export class ReportsService {
 
         // Apply running balance to sorted records
         const recordsWithBalance = sorted.map((r) => {
-          if (r.type === 'PURCHASE') runningBalance += r.credit;
-          else runningBalance -= r.debit;
+          if (r.type === 'PURCHASE') {
+            runningBalance += r.credit; // Add unpaid amount
+            runningBalance -= r.debit;  // Subtract immediate payment
+          } else {
+            runningBalance -= r.debit;  // Subtract payment
+          }
           return { ...r, runningBalance };
         });
 
         allLedger.push(...recordsWithBalance);
+        // Always use current supplier.balance for total
         totalBalance += Number(supplier.balance);
 
         summary.push({
           id: supplier.id,
           name: supplier.name,
+          contact: supplier.contact || supplier.email || null,
           debit: totalSupplierDebit,
           credit: totalSupplierCredit,
           balance: Number(supplier.balance),
@@ -711,6 +736,7 @@ export class ReportsService {
         ledger: allLedger,
         summary,
         currentBalance: totalBalance,
+        isMonthFiltered: !!month,
       };
     }
 
@@ -719,7 +745,7 @@ export class ReportsService {
     });
     if (!supplier) throw new Error('Supplier not found');
 
-    // Calculate Opening Balance
+    // Calculate opening balance up to startDate
     let runningBalance = 0;
     if (startDate) {
       const pastPurchases = await this.prisma.purchase.aggregate({
@@ -747,27 +773,34 @@ export class ReportsService {
       where: {
         supplierId,
         createdAt: { gte: startDate, lte: adjustedEnd },
+        debitAccount: { code: '20101' }, // Only actual payments (Accounts Payable debit)
       },
     });
 
     const sorted = [
-      ...purchases.map((p: any) => ({
-        date: p.date,
-        type: 'PURCHASE',
-        description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
-        debit: 0,
-        credit: Number(p.totalCost),
-        refId: p.id,
-        supplierName: supplier.name,
-        details: {
-          quantity: Number(p.quantity),
-          rate: Number(p.rate),
-          totalCost: Number(p.totalCost),
-          paidAmount: Number(p.paidAmount),
-          remainingAmount: Number(p.totalCost) - Number(p.paidAmount),
-          status: p.status,
-        },
-      })),
+      ...purchases.map((p: any) => {
+        const totalCost = Number(p.totalCost);
+        const paidAmount = Number(p.paidAmount || 0);
+        const unpaidAmount = totalCost - paidAmount;
+        
+        return {
+          date: p.date,
+          type: 'PURCHASE',
+          description: `${p.quantity}L ${p.tank?.product?.name || 'Fuel'} @ Rs. ${p.rate} (${p.tank?.name || 'Tank'})`,
+          debit: paidAmount, // What we paid immediately
+          credit: unpaidAmount, // What we still owe
+          refId: p.id,
+          supplierName: supplier.name,
+          details: {
+            quantity: Number(p.quantity),
+            rate: Number(p.rate),
+            totalCost: totalCost,
+            paidAmount: paidAmount,
+            remainingAmount: unpaidAmount,
+            status: p.status,
+          },
+        };
+      }),
       ...transactions.map((t) => ({
         date: t.createdAt,
         type: 'PAYMENT',
@@ -780,8 +813,12 @@ export class ReportsService {
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     const ledger = sorted.map((r) => {
-      if (r.type === 'PURCHASE') runningBalance += r.credit;
-      else runningBalance -= r.debit;
+      if (r.type === 'PURCHASE') {
+        runningBalance += r.credit; // Add unpaid amount
+        runningBalance -= r.debit;  // Subtract immediate payment
+      } else {
+        runningBalance -= r.debit;  // Subtract payment
+      }
       return { ...r, runningBalance };
     });
 
@@ -789,6 +826,7 @@ export class ReportsService {
       supplier,
       ledger,
       currentBalance: Number(supplier.balance),
+      isMonthFiltered: !!month,
     };
   }
 
@@ -796,7 +834,17 @@ export class ReportsService {
     customerId: string,
     startDate?: Date,
     endDate?: Date,
+    month?: string,
   ) {
+    // If month is provided, set date range for that month
+    if (month) {
+      const [year, monthNum] = month.split('-').map(Number);
+      startDate = new Date(year, monthNum - 1, 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(year, monthNum, 0);
+      endDate.setHours(23, 59, 59, 999);
+    }
+
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
@@ -808,7 +856,7 @@ export class ReportsService {
       let totalBalance = 0;
 
       for (const customer of customers) {
-        // Calculate Opening Balance
+        // Calculate opening balance up to startDate
         let runningBalance = 0;
         let totalCustomerDebit = 0;
         let totalCustomerCredit = 0;
@@ -858,13 +906,13 @@ export class ReportsService {
 
         const sorted = [
           ...creditTransactions.map((t: any) => {
-            totalCustomerDebit += Number(t.amount);
+            totalCustomerCredit += Number(t.amount);
             return {
               date: t.createdAt,
               type: 'CREDIT_SALE',
               description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
-              debit: Number(t.amount),
-              credit: 0,
+              debit: 0,
+              credit: Number(t.amount),
               refId: t.id,
               customerName: customer.name,
               details: {
@@ -878,13 +926,13 @@ export class ReportsService {
             };
           }),
           ...payments.map((p) => {
-            totalCustomerCredit += Number(p.amount);
+            totalCustomerDebit += Number(p.amount);
             return {
               date: p.createdAt,
               type: 'PAYMENT',
               description: `Payment received - ${p.description || 'Credit payment'}`,
-              debit: 0,
-              credit: Number(p.amount),
+              debit: Number(p.amount),
+              credit: 0,
               refId: p.id,
               customerName: customer.name,
             };
@@ -894,12 +942,13 @@ export class ReportsService {
         );
 
         const recordsWithBalance = sorted.map((r) => {
-          if (r.type === 'CREDIT_SALE') runningBalance += r.debit;
-          else runningBalance -= r.credit;
+          if (r.type === 'CREDIT_SALE') runningBalance += r.credit;
+          else runningBalance -= r.debit;
           return { ...r, runningBalance };
         });
 
         allLedger.push(...recordsWithBalance);
+        // Always use current customer.totalCredit for total
         totalBalance += Number(customer.totalCredit);
 
         summary.push({
@@ -916,6 +965,7 @@ export class ReportsService {
         ledger: allLedger,
         summary,
         currentBalance: totalBalance,
+        isMonthFiltered: !!month,
       };
     }
 
@@ -927,10 +977,11 @@ export class ReportsService {
         customer: null,
         ledger: [],
         currentBalance: 0,
+        isMonthFiltered: !!month,
       };
     }
 
-    // Calculate Opening Balance
+    // Calculate opening balance up to startDate
     let runningBalance = 0;
     if (startDate) {
       const pastSales = await this.prisma.transaction.aggregate({
@@ -980,8 +1031,8 @@ export class ReportsService {
         date: t.createdAt,
         type: 'CREDIT_SALE',
         description: `${t.quantity || 0}L ${t.product?.name || 'Fuel'} via ${t.nozzle?.name || 'Nozzle'}`,
-        debit: Number(t.amount),
-        credit: 0,
+        debit: 0,
+        credit: Number(t.amount),
         refId: t.id,
         customerName: customer.name,
         details: {
@@ -997,16 +1048,16 @@ export class ReportsService {
         date: p.createdAt,
         type: 'PAYMENT',
         description: `Payment received - ${p.description || 'Credit payment'}`,
-        debit: 0,
-        credit: Number(p.amount),
+        debit: Number(p.amount),
+        credit: 0,
         refId: p.id,
         customerName: customer.name,
       })),
     ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     const ledger = sorted.map((r) => {
-      if (r.type === 'CREDIT_SALE') runningBalance += r.debit;
-      else runningBalance -= r.credit;
+      if (r.type === 'CREDIT_SALE') runningBalance += r.credit;
+      else runningBalance -= r.debit;
       return { ...r, runningBalance };
     });
 
@@ -1014,6 +1065,7 @@ export class ReportsService {
       customer,
       ledger,
       currentBalance: Number(customer.totalCredit),
+      isMonthFiltered: !!month,
     };
   }
 
@@ -1256,5 +1308,127 @@ export class ReportsService {
       .reduce((s, t) => s + Number(t.amount), 0);
 
     return { totalSales, cashSales, creditSales, cardSales, onlineSales };
+  }
+
+  async generateInvoice(type: string, id: string): Promise<Buffer> {
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const chunks: Buffer[] = [];
+
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+
+    const now = new Date();
+    const formattedDate = now.toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Karachi',
+    });
+
+    let entity: any;
+    let ledger: any[];
+
+    if (type === 'supplier') {
+      const data = await this.getSupplierLedger(id);
+      entity = data.supplier;
+      ledger = data.ledger;
+    } else {
+      const data = await this.getCustomerLedger(id);
+      entity = data.customer;
+      ledger = data.ledger;
+    }
+
+    doc.rect(0, 0, doc.page.width, 100).fill('#1e40af');
+    doc.fontSize(24).fillColor('#ffffff').font('Helvetica-Bold')
+      .text('PETROL PUMP MANAGEMENT', 40, 25, { align: 'center' });
+    doc.fontSize(14).fillColor('#93c5fd')
+      .text(type === 'supplier' ? 'SUPPLIER INVOICE' : 'CUSTOMER INVOICE', { align: 'center' });
+    doc.fontSize(9).fillColor('#e0e7ff')
+      .text(`Generated: ${formattedDate}`, 40, 75, { align: 'right' });
+
+    doc.moveDown(3);
+
+    doc.fontSize(12).fillColor('#000').font('Helvetica-Bold')
+      .text(type === 'supplier' ? 'Supplier Details' : 'Customer Details', 40);
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica')
+      .fillColor('#000').text(`Name: ${entity.name}`, 40);
+    if (entity.contact) {
+      doc.text(`Contact: ${entity.contact}`, 40);
+    }
+    if (entity.email) {
+      doc.text(`Email: ${entity.email}`, 40);
+    }
+    if (entity.vehicleNumber) {
+      doc.text(`Vehicle: ${entity.vehicleNumber}`, 40);
+    }
+    doc.moveDown(1);
+
+    const totalBalance = ledger.length > 0 ? ledger[ledger.length - 1].runningBalance || 0 : 0;
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#1e40af')
+      .text(`Outstanding Balance: Rs. ${totalBalance.toLocaleString()}`, 40);
+    doc.moveDown(1.5);
+
+    doc.fontSize(12).font('Helvetica-Bold').fillColor('#000')
+      .text('Transaction History', 40);
+    doc.moveDown(0.5);
+
+    const dateWidth = 90;
+    const descWidth = 210;
+    const debitWidth = 60;
+    const creditWidth = 60;
+    const balanceWidth = 60;
+    let y = doc.y;
+
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e293b');
+    doc.text('Date/Time', 40, y, { width: dateWidth, align: 'left' });
+    doc.text('Description', 40 + dateWidth, y, { width: descWidth, align: 'left' });
+    doc.text('Debit', 40 + dateWidth + descWidth, y, { width: debitWidth, align: 'right' });
+    doc.text('Credit', 40 + dateWidth + descWidth + debitWidth, y, { width: creditWidth, align: 'right' });
+    doc.text('Balance', 40 + dateWidth + descWidth + debitWidth + creditWidth, y, { width: balanceWidth, align: 'right' });
+    y += 15;
+    doc.moveTo(40, y).lineTo(doc.page.width - 40, y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+    y += 5;
+
+    doc.fontSize(8).font('Helvetica').fillColor('#000');
+    ledger.forEach((row, rowIdx) => {
+      if (y > doc.page.height - 100) {
+        doc.addPage();
+        y = 40;
+      }
+      const dateTime = new Date(row.date).toLocaleString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      doc.text(dateTime, 40, y, { width: dateWidth, ellipsis: true, lineBreak: false });
+      doc.text(row.description || '-', 40 + dateWidth, y, { width: descWidth, ellipsis: true, lineBreak: false });
+      doc.text(row.debit > 0 ? row.debit.toLocaleString() : '-', 40 + dateWidth + descWidth, y, { width: debitWidth, align: 'right', ellipsis: true, lineBreak: false });
+      doc.text(row.credit > 0 ? row.credit.toLocaleString() : '-', 40 + dateWidth + descWidth + debitWidth, y, { width: creditWidth, align: 'right', ellipsis: true, lineBreak: false });
+      doc.text((row.runningBalance || 0).toLocaleString(), 40 + dateWidth + descWidth + debitWidth + creditWidth, y, { width: balanceWidth, align: 'right', ellipsis: true, lineBreak: false });
+      y += 12;
+      if (rowIdx % 5 === 4) {
+        doc.moveTo(40, y).lineTo(doc.page.width - 40, y).strokeColor('#f1f5f9').lineWidth(0.5).stroke();
+        y += 3;
+      }
+    });
+
+    const bottom = doc.page.height - 50;
+    doc.fontSize(8).fillColor('#94a3b8')
+      .text('PETROL PUMP MANAGEMENT SYSTEM | PROFESSIONAL INVOICE', 40, bottom, { align: 'center' });
+    doc.fontSize(7).text('\u00a9 2026 PPMS | Electronically Generated Document', { align: 'center' });
+
+    doc.end();
+
+    return new Promise((resolve, reject) => {
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+    });
   }
 }

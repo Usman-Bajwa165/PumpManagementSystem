@@ -137,7 +137,7 @@ export default function SuppliersPage() {
     try {
       await api.post(`/suppliers/${selectedSupplier.id}/pay`, {
         amount: parseFloat(payAmount),
-        userId: user?.sub || "ADMIN",
+        userId: user?.sub || undefined,
         paymentMethod,
         paymentAccountId:
           paymentMethod !== "CASH" ? selectedAccountId : undefined,

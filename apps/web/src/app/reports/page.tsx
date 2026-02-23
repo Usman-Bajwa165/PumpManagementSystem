@@ -120,6 +120,9 @@ export default function ReportsPage() {
   const [showLogs, setShowLogs] = useState(
     searchParams.get("showLogs") === "true",
   );
+  const [selectedMonth, setSelectedMonth] = useState(
+    searchParams.get("month") || new Date().toISOString().slice(0, 7),
+  );
 
   interface Shift {
     id: string;
@@ -173,6 +176,7 @@ export default function ReportsPage() {
       params.set("ledgerType", ledgerType);
       if (selectedEntityId) params.set("entityId", selectedEntityId);
       params.set("showLogs", showLogs.toString());
+      if (selectedMonth) params.set("month", selectedMonth);
     }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -191,6 +195,7 @@ export default function ReportsPage() {
     ledgerType,
     selectedEntityId,
     showLogs,
+    selectedMonth,
     router,
   ]);
 
@@ -202,6 +207,7 @@ export default function ReportsPage() {
 
       if (dateRange.start) params.startDate = dateRange.start;
       if (dateRange.end) params.endDate = dateRange.end;
+      if (selectedMonth) params.month = selectedMonth;
 
       switch (reportType) {
         case "PL":
@@ -311,6 +317,7 @@ export default function ReportsPage() {
     purchaseProductId,
     ledgerType,
     selectedEntityId,
+    selectedMonth,
     fetchReport,
   ]);
 
@@ -327,6 +334,8 @@ export default function ReportsPage() {
     if (!data) return;
     const doc = new jsPDF();
     const title = tabs.find((t) => t.id === reportType)?.label || "Report";
+    const date = new Date().toISOString().split('T')[0];
+    const filename = `${title.replace(/\s+/g, '_')}_${date}.pdf`;
 
     // Professional Header with styling
     doc.setFillColor(24, 24, 27); // Zinc-950
@@ -493,7 +502,7 @@ export default function ReportsPage() {
       },
     });
 
-    doc.save(`${title.replace(/\s+/g, "_")}_${new Date().getTime()}.pdf`);
+    doc.save(filename);
   };
 
   return (
@@ -746,6 +755,22 @@ export default function ReportsPage() {
                     ),
                   )}
                 </select>
+
+                <input
+                  type="month"
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  placeholder="Select month"
+                />
+                {selectedMonth && (
+                  <button
+                    onClick={() => setSelectedMonth("")}
+                    className="px-3 py-2 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-all"
+                  >
+                    Clear Month
+                  </button>
+                )}
               </div>
             )}
 
@@ -1308,6 +1333,53 @@ export default function ReportsPage() {
             {/* Ledger */}
             {reportType === "LEDGER" && (
               <div className="space-y-6">
+                {data?.isMonthFiltered && (
+                  <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-xs text-blue-400 font-bold">
+                      📅 Month Filter Active: Showing transactions and summary for selected month only. Total balance shows current all-time balance.
+                    </p>
+                  </div>
+                )}
+                {selectedEntityId === "ALL" && data?.summary && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="p-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/5">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-3 bg-emerald-500/20 rounded-2xl text-emerald-500">
+                          <TrendingDown size={24} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-emerald-500/70">
+                            {ledgerType === "CUSTOMER" ? "Total Receivable" : "Total Payable"}
+                          </p>
+                          <p className="text-3xl font-black text-emerald-500 font-mono italic">
+                            Rs. {data.summary.reduce((sum: number, item: any) => sum + item.balance, 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        {ledgerType === "CUSTOMER" ? "Amount to be received from customers" : "Amount to be paid to suppliers"}
+                      </p>
+                    </div>
+                    <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/40">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-3 bg-zinc-800 rounded-2xl text-zinc-400">
+                          <BookOpen size={24} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                            Total {ledgerType === "CUSTOMER" ? "Customers" : "Suppliers"}
+                          </p>
+                          <p className="text-3xl font-black text-zinc-100 font-mono italic">
+                            {data.summary.length}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="text-xs text-zinc-500">
+                        Active accounts with outstanding balance
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {selectedEntityId === "ALL" && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -1330,6 +1402,28 @@ export default function ReportsPage() {
                         className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-900 text-zinc-500 hover:text-zinc-300"
                       >
                         ← Back to Summary
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const entityName = ledgerType === "SUPPLIER" ? data?.supplier?.name : data?.customer?.name;
+                            const response = await api.get(`/reports/invoice/${ledgerType.toLowerCase()}/${selectedEntityId}`, { responseType: 'blob' });
+                            const url = window.URL.createObjectURL(new Blob([response.data]));
+                            const link = document.createElement('a');
+                            link.href = url;
+                            const date = new Date().toISOString().split('T')[0];
+                            link.setAttribute('download', `INV_${entityName?.replace(/\s+/g, '_')}_${date}.pdf`);
+                            document.body.appendChild(link);
+                            link.click();
+                            link.remove();
+                          } catch (error) {
+                            console.error('Failed to download invoice:', error);
+                            alert('Failed to generate invoice. Please try again.');
+                          }
+                        }}
+                        className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-blue-600 text-white hover:bg-blue-500"
+                      >
+                        Generate Invoice
                       </button>
                     </div>
 
@@ -1358,12 +1452,12 @@ export default function ReportsPage() {
                                 ? "Supplier Name"
                                 : "Customer Name"}
                             </th>
-                            <th className="px-6 py-5 text-right">Debit (OUT)</th>
+                            <th className="px-6 py-5 text-right">Debit (Paid)</th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                              Credit (IN)
+                              Credit (Purchased)
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
-                              Net Balance
+                              {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}
                             </th>
                             <th className="px-6 py-5 text-center">Action</th>
                           </tr>
@@ -1374,8 +1468,19 @@ export default function ReportsPage() {
                               key={i}
                               className="hover:bg-zinc-100/2 transition-colors"
                             >
-                              <td className="px-6 py-5 font-bold text-zinc-100">
-                                {item.name}
+                              <td className="px-6 py-5">
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-bold text-zinc-100">{item.name}</span>
+                                  {item.contact ? (
+                                    item.contact.includes('@') ? (
+                                      <span className="text-xs text-zinc-500">✉️ {item.contact}</span>
+                                    ) : (
+                                      <span className="text-xs text-zinc-500">📞 {item.contact}</span>
+                                    )
+                                  ) : (
+                                    <span className="text-xs text-zinc-600">📞 No contact</span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-6 py-5 text-right font-mono text-rose-400/80">
                                 {item.debit > 0
@@ -1400,6 +1505,27 @@ export default function ReportsPage() {
                                     className="px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-black text-zinc-400 hover:text-white hover:border-zinc-700 transition-all uppercase"
                                   >
                                     Logs
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const response = await api.get(`/reports/invoice/${ledgerType.toLowerCase()}/${item.id}`, { responseType: 'blob' });
+                                        const url = window.URL.createObjectURL(new Blob([response.data]));
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        const date = new Date().toISOString().split('T')[0];
+                                        link.setAttribute('download', `INV_${item.name.replace(/\s+/g, '_')}_${date}.pdf`);
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        link.remove();
+                                      } catch (error) {
+                                        console.error('Failed to download invoice:', error);
+                                        alert('Failed to generate invoice. Please try again.');
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-[10px] font-black text-white hover:bg-blue-500 transition-all uppercase"
+                                  >
+                                    Invoice
                                   </button>
                                 </div>
                               </td>
@@ -1428,13 +1554,13 @@ export default function ReportsPage() {
                             <th className="px-6 py-5">Date</th>
                             <th className="px-6 py-5">Flow Description</th>
                             <th className="px-6 py-5 text-right">
-                              Debit (OUT)
+                              {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Purchased)"}
                             </th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                              Credit (IN)
+                              {ledgerType === "SUPPLIER" ? "Debit (Payments)" : "Credit (Sales)"}
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
-                              Balance
+                              {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}
                             </th>
                           </tr>
                         </thead>

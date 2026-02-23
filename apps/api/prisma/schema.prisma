@@ -141,6 +141,8 @@ model CreditCustomer {
   id            String   @id @default(uuid())
   name          String   @unique
   vehicleNumber String?
+  contact       String?
+  email         String?
   totalCredit   Decimal  @default(0) @db.Decimal(15, 2)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -214,6 +216,7 @@ model Supplier {
   id        String   @id @default(uuid())
   name      String   @unique
   contact   String?
+  email     String?
   balance   Decimal  @default(0) @db.Decimal(15, 2) // Positive means we owe them (Liability)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

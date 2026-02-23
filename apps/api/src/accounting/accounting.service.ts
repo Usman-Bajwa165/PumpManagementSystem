@@ -20,7 +20,7 @@ export class AccountingService implements OnModuleInit {
 
   async onModuleInit() {
     await this.seedAccounts();
-    await this.seedPaymentAccounts();
+    // await this.seedPaymentAccounts();
     await this.syncInventoryAccountBalance();
   }
 
@@ -61,22 +61,22 @@ export class AccountingService implements OnModuleInit {
     }
   }
 
-  async seedPaymentAccounts() {
-    const paymentAccounts = [
-      { name: 'JazzCash', type: 'ONLINE', accountNumber: null },
-      { name: 'EasyPaisa', type: 'ONLINE', accountNumber: null },
-    ];
+  // async seedPaymentAccounts() {
+  //   const paymentAccounts = [
+  //     { name: 'JazzCash', type: 'ONLINE', accountNumber: null },
+  //     { name: 'EasyPaisa', type: 'ONLINE', accountNumber: null },
+  //   ];
 
-    for (const pa of paymentAccounts) {
-      const exists = await this.prisma.paymentAccount.findFirst({
-        where: { name: pa.name },
-      });
-      if (!exists) {
-        await this.prisma.paymentAccount.create({ data: pa });
-        console.log(`Seeded payment account: ${pa.name}`);
-      }
-    }
-  }
+  //   for (const pa of paymentAccounts) {
+  //     const exists = await this.prisma.paymentAccount.findFirst({
+  //       where: { name: pa.name },
+  //     });
+  //     if (!exists) {
+  //       await this.prisma.paymentAccount.create({ data: pa });
+  //       console.log(`Seeded payment account: ${pa.name}`);
+  //     }
+  //   }
+  // }
 
   async createTransaction(
     data: {

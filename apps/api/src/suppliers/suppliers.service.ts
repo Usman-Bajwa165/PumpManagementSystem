@@ -110,9 +110,9 @@ export class SuppliersService {
           debitAccountId: debitAcc.id,
           creditAccountId: creditAccId,
           amount: amount,
-          createdById: userId,
+          createdById: userId || null,
           description: `Supplier Payment - ${supplier.name} - ${paymentMethod || 'CASH'} - ${formattedDateTime}`,
-          paymentAccountId: paymentAccountId,
+          paymentAccountId: paymentAccountId || null,
         },
       });
 

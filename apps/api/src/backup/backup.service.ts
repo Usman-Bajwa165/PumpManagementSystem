@@ -144,7 +144,7 @@ export class BackupService {
       const displayHours = hours % 12 || 12;
       const formattedHours = String(displayHours).padStart(2, '0');
 
-      const filename = `Man_${day}${month}${year}_${formattedHours}:${minutes}${period}.pdf`;
+      const filename = `Man_${day}${month}${year}_${formattedHours}-${minutes}${period}.pdf`;
       const backupFile = path.join(this.backupDir, filename);
 
       this.logger.log('Starting manual backup...', 'BackupService');
@@ -210,7 +210,7 @@ export class BackupService {
         const period = hours >= 12 ? 'pm' : 'am';
         const displayHours = hours % 12 || 12;
         const formattedHours = String(displayHours).padStart(2, '0');
-        filename = `Full_Man_${day}${month}${yearShort}_${formattedHours}:${minutes}${period}.pdf`;
+        filename = `Full_Man_${day}${month}${yearShort}_${formattedHours}-${minutes}${period}.pdf`;
       }
 
       const backupFile = path.join(this.backupDir, filename);
@@ -257,201 +257,223 @@ export class BackupService {
     type: string,
     period?: 'D' | 'N',
     isFull: boolean = false,
-  ) {
-    const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    const stream = fs.createWriteStream(filePath);
-    doc.pipe(stream);
+  ): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ margin: 40, size: 'A4' });
+        const stream = fs.createWriteStream(filePath);
 
-    const now = new Date();
-    // Format date as "21 Feb 2026, 12:04 AM"
-    const formattedDate = now.toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'Asia/Karachi',
-    });
+        stream.on('error', (err) => {
+          this.logger.error('Stream error', err.message, 'BackupService');
+          reject(err);
+        });
 
-    // Get last auto backup timestamp for incremental backups
-    let sinceDate: Date | undefined;
-    if (!isFull) {
-      sinceDate = this.getLastAutoBackupDate();
-    }
+        stream.on('finish', () => {
+          this.logger.log(`PDF written successfully: ${filePath}`, 'BackupService');
+          resolve();
+        });
 
-    // Professional Header
-    doc.rect(0, 0, doc.page.width, 120).fill('#18181b'); // Dark Zinc-950
+        doc.pipe(stream);
 
-    doc
-      .fontSize(22)
-      .fillColor('#ffffff')
-      .font('Helvetica-Bold')
-      .text('PETROL PUMP MANAGEMENT SYSTEM', 50, 45, { align: 'center' });
+        const now = new Date();
+        const formattedDate = now.toLocaleString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'Asia/Karachi',
+        });
 
-    doc
-      .fontSize(12)
-      .fillColor('#ef4444') // Red-500
-      .text(isFull ? 'COMPLETE DATABASE BACKUP' : 'INCREMENTAL BACKUP', {
-        align: 'center',
-      });
+        let sinceDate: Date | undefined;
+        if (!isFull) {
+          sinceDate = this.getLastAutoBackupDate();
+        }
 
-    doc.moveDown(1.5);
-    doc
-      .fontSize(10)
-      .fillColor('#71717a') // Zinc-400
-      .text(`Generated: ${formattedDate}`, { align: 'right' });
+        // Header
+        doc.rect(0, 0, doc.page.width, 100).fill('#1e40af');
+        doc.fontSize(24).fillColor('#ffffff').font('Helvetica-Bold')
+          .text('PETROL PUMP MANAGEMENT', 40, 30, { align: 'center' });
+        doc.fontSize(14).fillColor('#93c5fd')
+          .text(isFull ? 'COMPLETE DATABASE BACKUP' : 'INCREMENTAL BACKUP', { align: 'center' });
+        doc.fontSize(9).fillColor('#e0e7ff')
+          .text(`Generated: ${formattedDate}`, 40, 75, { align: 'right' });
+        if (sinceDate) {
+          const formattedSince = sinceDate.toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Karachi',
+          });
+          doc.text(`Data Since: ${formattedSince}`, { align: 'right' });
+        }
+        doc.moveDown(3);
 
-    if (sinceDate) {
-      const formattedSince = sinceDate.toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-        timeZone: 'Asia/Karachi',
-      });
-      doc.text(`Data Coverage Since: ${formattedSince}`, { align: 'right' });
-    }
+        // Users
+        const users = await this.prisma.user.findMany();
+        this.addSectionHeader(doc, 'SYSTEM USERS', '#10b981');
+        this.addTable(doc, ['#', 'Username', 'Role', 'Status'], users.map((u, i) => [
+          (i + 1).toString(),
+          u.username,
+          u.role,
+          'Active'
+        ]));
+        doc.moveDown();
 
-    doc.moveDown(2);
-    doc.fillColor('#000000'); // Reset to black
+        // Shifts
+        const shiftsWhere = sinceDate ? { startTime: { gte: sinceDate } } : {};
+        const shifts = await this.prisma.shift.findMany({
+          where: shiftsWhere,
+          include: { opener: true, closer: true, readings: { include: { nozzle: true } } },
+          orderBy: { startTime: 'desc' },
+          take: isFull ? undefined : 50,
+        });
+        this.addSectionHeader(doc, 'SHIFT RECORDS', '#f59e0b');
+        for (const shift of shifts) {
+          const startTime = new Date(shift.startTime).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          const endTime = shift.endTime ? new Date(shift.endTime).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          }) : 'Ongoing';
+          doc.fontSize(10).fillColor('#000').font('Helvetica-Bold')
+            .text(`Shift: ${shift.status} | Opened: ${startTime} | Closed: ${endTime}`, 50);
+          doc.fontSize(9).font('Helvetica')
+            .text(`Operator: ${shift.opener.username}${shift.closer ? ` | Closer: ${shift.closer.username}` : ''}`, 50);
 
-    // Users
-    const users = await this.prisma.user.findMany();
-    this.addSection(doc, 'SYSTEM USERS', users.length);
-    users.forEach((user, idx) => {
-      doc
-        .fontSize(10)
-        .font('Helvetica')
-        .text(
-          `${idx + 1}. ${user.username.padEnd(20)} | Role: ${user.role} | Status: Active`,
-          { indent: 20 },
-        );
-    });
-    doc.moveDown();
+          if (shift.readings.length > 0) {
+            const readingsData = shift.readings.map(r => [
+              r.nozzle.name,
+              Number(r.openingReading).toFixed(2),
+              r.closingReading ? Number(r.closingReading).toFixed(2) : '-',
+              r.closingReading ? (Number(r.closingReading) - Number(r.openingReading)).toFixed(2) : '-'
+            ]);
+            this.addTable(doc, ['Nozzle', 'Opening', 'Closing', 'Sold (L)'], readingsData, 60);
+          }
+          doc.moveDown(0.5);
+        }
+        doc.moveDown();
 
-    // Shifts
-    const shiftsWhere = sinceDate ? { startTime: { gte: sinceDate } } : {};
-    const shifts = await this.prisma.shift.findMany({
-      where: shiftsWhere,
-      include: { opener: true, closer: true },
-      orderBy: { startTime: 'desc' },
-      take: isFull ? undefined : 50,
-    });
-    this.addSection(
-      doc,
-      isFull ? 'SHIFT RECORDS' : 'RECENT SHIFTS',
-      shifts.length,
-    );
-    shifts.forEach((shift, idx) => {
-      const startTime = new Date(shift.startTime).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-      doc
-        .fontSize(9)
-        .text(
-          `${idx + 1}. [${shift.status}] Opened by ${shift.opener.username} at ${startTime}`,
-          { indent: 20 },
-        );
-    });
-    doc.moveDown();
+        // Inventory
+        const tanks = await this.prisma.tank.findMany({ include: { product: true, nozzles: true } });
+        this.addSectionHeader(doc, 'INVENTORY STATUS', '#8b5cf6');
+        const tankData = tanks.map(t => [
+          t.name,
+          t.product.name,
+          `${Number(t.currentStock).toFixed(2)} L`,
+          `${Number(t.capacity).toFixed(2)} L`,
+          `${((Number(t.currentStock) / Number(t.capacity)) * 100).toFixed(1)}%`,
+          t.nozzles.length.toString()
+        ]);
+        this.addTable(doc, ['Tank', 'Product', 'Stock', 'Capacity', 'Fill %', 'Nozzles'], tankData);
+        doc.moveDown();
 
-    // Inventory
-    const tanks = await this.prisma.tank.findMany({
-      include: { product: true },
-    });
-    this.addSection(doc, 'INVENTORY STATUS', tanks.length);
-    tanks.forEach((tank, idx) => {
-      const percentage = (
-        (Number(tank.currentStock) / Number(tank.capacity)) *
-        100
-      ).toFixed(1);
-      doc
-        .fontSize(10)
-        .text(
-          `${idx + 1}. ${tank.name} (${tank.product.name}): ${tank.currentStock.toString()}L / ${tank.capacity.toString()}L (${percentage}%)`,
-          { indent: 20 },
-        );
-    });
-    doc.moveDown();
+        // Sales Summary
+        const transactionsWhere = sinceDate ? { createdAt: { gte: sinceDate } } : {};
+        const salesTxs = await this.prisma.transaction.findMany({
+          where: { ...transactionsWhere, product: { isNot: null } },
+          include: { product: true, nozzle: true },
+        });
 
-    // Ledgers
-    const accounts = await this.prisma.account.findMany({
-      orderBy: { code: 'asc' },
-    });
-    this.addSection(doc, 'FINANCIAL LEDGERS', accounts.length);
-    accounts.forEach((account, idx) => {
-      doc
-        .fontSize(9)
-        .text(
-          `${idx + 1}. [${account.code}] ${account.name.padEnd(30)} | Balance: Rs. ${Number(account.balance).toLocaleString()}`,
-          { indent: 20 },
-        );
-    });
-    doc.moveDown();
+        if (salesTxs.length > 0) {
+          this.addSectionHeader(doc, 'SALES SUMMARY', '#ef4444');
+          const salesByProduct = salesTxs.reduce((acc, tx) => {
+            const pName = tx.product?.name || 'Unknown';
+            if (!acc[pName]) acc[pName] = { qty: 0, amount: 0, count: 0 };
+            acc[pName].qty += Number(tx.quantity || 0);
+            acc[pName].amount += Number(tx.amount);
+            acc[pName].count += 1;
+            return acc;
+          }, {} as Record<string, { qty: number; amount: number; count: number }>);
 
-    // Transactions
-    const transactionsWhere = sinceDate
-      ? { createdAt: { gte: sinceDate } }
-      : {};
-    const transactions = await this.prisma.transaction.findMany({
-      where: transactionsWhere,
-      include: { debitAccount: true, creditAccount: true },
-      orderBy: { createdAt: 'desc' },
-      take: isFull ? undefined : 200,
-    });
-    this.addSection(
-      doc,
-      isFull ? 'ALL TRANSACTIONS' : 'RECENT TRANSACTIONS',
-      transactions.length,
-    );
-    transactions.forEach((tx, idx) => {
-      const txDate = new Date(tx.createdAt).toLocaleString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      });
-      doc
-        .fontSize(8)
-        .text(
-          `${idx + 1}. ${txDate} | Rs. ${Number(tx.amount).toLocaleString().padStart(10)} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name}`,
-          { indent: 20 },
-        );
+          const salesData = Object.entries(salesByProduct).map(([product, data]) => [
+            product,
+            data.count.toString(),
+            `${data.qty.toFixed(2)} L`,
+            `Rs. ${data.amount.toLocaleString()}`
+          ]);
+          this.addTable(doc, ['Product', 'Transactions', 'Quantity', 'Revenue'], salesData);
 
-      if ((idx + 1) % 45 === 0 && idx < transactions.length - 1) {
-        doc.addPage();
+          const totalRevenue = Object.values(salesByProduct).reduce((sum, d) => sum + d.amount, 0);
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000')
+            .text(`Total Revenue: Rs. ${totalRevenue.toLocaleString()}`, 50);
+          doc.moveDown();
+        }
+
+        // Accounts
+        const accounts = await this.prisma.account.findMany({ orderBy: { code: 'asc' } });
+        this.addSectionHeader(doc, 'FINANCIAL ACCOUNTS', '#06b6d4');
+        const accountData = accounts.map(a => [
+          a.code,
+          a.name,
+          a.type,
+          `Rs. ${Number(a.balance).toLocaleString()}`
+        ]);
+        this.addTable(doc, ['Code', 'Account Name', 'Type', 'Balance'], accountData);
+        doc.moveDown();
+
+        // Nozzle Readings
+        const nozzles = await this.prisma.nozzle.findMany({
+          include: { tank: { include: { product: true } } }
+        });
+        this.addSectionHeader(doc, 'NOZZLE READINGS', '#ec4899');
+        const nozzleData = nozzles.map(n => [
+          n.name,
+          n.tank.product.name,
+          n.tank.name,
+          `${Number(n.lastReading).toFixed(2)} L`
+        ]);
+        this.addTable(doc, ['Nozzle', 'Product', 'Tank', 'Last Reading'], nozzleData);
+        doc.moveDown();
+
+        // Transactions
+        const transactions = await this.prisma.transaction.findMany({
+          where: transactionsWhere,
+          include: { debitAccount: true, creditAccount: true },
+          orderBy: { createdAt: 'desc' },
+          take: isFull ? undefined : 100,
+        });
+        this.addSectionHeader(doc, 'TRANSACTION LEDGER', '#64748b');
+        for (let i = 0; i < transactions.length; i++) {
+          const tx = transactions[i];
+          const txDate = new Date(tx.createdAt).toLocaleString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+          });
+          doc.fontSize(8).fillColor('#000').font('Helvetica')
+            .text(`${txDate} | Rs. ${Number(tx.amount).toLocaleString()} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name}`, 50);
+          if (tx.description) {
+            doc.fontSize(7).fillColor('#666').text(`  ${tx.description}`, 50);
+          }
+          if (i % 50 === 0 && i > 0 && i < transactions.length - 1) doc.addPage();
+        }
+
+        // Footer
+        const bottom = doc.page.height - 50;
+        doc.fontSize(8).fillColor('#94a3b8')
+          .text('PETROL PUMP MANAGEMENT SYSTEM | SECURE DATABASE BACKUP', 40, bottom, { align: 'center' });
+        doc.fontSize(7).text('© 2026 PPMS | Electronically Generated Document', { align: 'center' });
+
+        doc.end();
+      } catch (error) {
+        this.logger.error('PDF generation error', error instanceof Error ? error.message : 'Unknown', 'BackupService');
+        reject(error);
       }
-    });
-
-    // Signature/Footer
-    doc.moveDown(3);
-    const bottom = doc.page.height - 70;
-    doc
-      .fontSize(8)
-      .fillColor('#71717a')
-      .text(
-        'PETROL PUMP MANAGEMENT SYSTEM PORTABLE DATABASE BACKUP',
-        50,
-        bottom,
-        { align: 'center' },
-      );
-    doc.text(
-      '© 2026 PPMS | This is an electronically generated secure document.',
-      { align: 'center' },
-    );
-
-    doc.end();
-    return new Promise<void>((resolve, reject) => {
-      stream.on('finish', () => resolve());
-      stream.on('error', reject);
     });
   }
 
@@ -475,15 +497,44 @@ export class BackupService {
     }
   }
 
-  private addSection(doc: PDFKit.PDFDocument, title: string, count: number) {
-    doc
-      .fontSize(14)
-      .font('Helvetica-Bold')
-      .fillColor('#000')
-      .text(`${title} (${count})`);
-    doc.moveDown(0.5);
-    doc.fontSize(8).fillColor('#ccc').text('─'.repeat(100));
-    doc.moveDown(0.5);
+  private addSectionHeader(doc: PDFKit.PDFDocument, title: string, color: string) {
+    doc.fontSize(12).font('Helvetica-Bold').fillColor(color)
+      .text(title, 40);
+    doc.moveTo(40, doc.y + 5).lineTo(doc.page.width - 40, doc.y + 5)
+      .strokeColor(color).lineWidth(2).stroke();
+    doc.moveDown(0.8);
+  }
+
+  private addTable(doc: PDFKit.PDFDocument, headers: string[], rows: string[][], indent = 50) {
+    const colWidth = (doc.page.width - indent * 2) / headers.length;
+    let y = doc.y;
+
+    // Headers
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e293b');
+    headers.forEach((h, i) => {
+      doc.text(h, indent + i * colWidth, y, { width: colWidth - 5, align: 'left' });
+    });
+    y += 15;
+    doc.moveTo(indent, y).lineTo(doc.page.width - indent, y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+    y += 5;
+
+    // Rows
+    doc.fontSize(8).font('Helvetica').fillColor('#000');
+    rows.forEach((row, rowIdx) => {
+      if (y > doc.page.height - 100) {
+        doc.addPage();
+        y = 40;
+      }
+      row.forEach((cell, i) => {
+        doc.text(cell, indent + i * colWidth, y, { width: colWidth - 5, align: 'left' });
+      });
+      y += 12;
+      if (rowIdx % 5 === 4) {
+        doc.moveTo(indent, y).lineTo(doc.page.width - indent, y).strokeColor('#f1f5f9').lineWidth(0.5).stroke();
+        y += 3;
+      }
+    });
+    doc.y = y + 5;
   }
 
   getBackupLocation() {

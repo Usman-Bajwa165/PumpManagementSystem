@@ -469,8 +469,8 @@ export default function InventoryPage() {
                       value={paymentStatus}
                       onChange={(e) => setPaymentStatus(e.target.value as any)}
                     >
-                      <option value="UNPAID">Unpaid (Credit)</option>
-                      <option value="PAID">Paid (Cash)</option>
+                      <option value="UNPAID">Unpaid</option>
+                      <option value="PAID">Paid</option>
                       <option value="PARTIAL">Partial Payment</option>
                     </select>
                   </div>
@@ -533,11 +533,14 @@ export default function InventoryPage() {
                           className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3.5 text-zinc-200 outline-none focus:border-red-600 transition-all appearance-none"
                         >
                           <option value="">Select Account...</option>
-                          {paymentAccounts.map((acc: any) => (
-                            <option key={acc.id} value={acc.id}>
-                              {acc.name} ({acc.provider})
-                            </option>
-                          ))}
+                          {paymentAccounts
+                            .filter((acc) => acc.type === paymentMethod)
+                            .map((acc) => (
+                              <option key={acc.id} value={acc.id}>
+                                {acc.name}
+                                {acc.accountNumber ? ` - ${acc.accountNumber}` : ""}
+                              </option>
+                            ))}
                         </select>
                       </div>
                     )}

@@ -26,6 +26,14 @@ export class CreateSaleDto {
 
   @IsString()
   @IsOptional()
+  customerContact?: string;
+
+  @IsString()
+  @IsOptional()
+  customerEmail?: string;
+
+  @IsString()
+  @IsOptional()
   paymentAccountId?: string;
 
   @IsString() // 'CASH' | 'CARD' | 'ONLINE' | 'CREDIT'
