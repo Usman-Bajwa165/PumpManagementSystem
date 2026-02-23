@@ -73,7 +73,7 @@ export class InventoryService {
     }
 
     const supplier = await this.prisma.supplier.findUnique({
-      where: { id: dto.supplierId },
+      where: { id: dto.supplierId, isDeleted: false },
     });
     if (!supplier) throw new BadRequestException('Supplier not found');
 

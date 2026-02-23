@@ -35,7 +35,7 @@ interface CreditCustomer {
 
 export default function SuppliersPage() {
   const [activeTab, setActiveTab] = useState<"suppliers" | "credit">(
-    "suppliers",
+    (typeof window !== 'undefined' && (localStorage.getItem('suppliersActiveTab') as any)) || "suppliers",
   );
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
@@ -46,6 +46,14 @@ export default function SuppliersPage() {
   const [error, setError] = useState("");
   const [name, setName] = useState("");
   const [contact, setContact] = useState("");
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editContact, setEditContact] = useState("");
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
@@ -110,6 +118,7 @@ export default function SuppliersPage() {
     } else {
       fetchCreditCustomers();
     }
+    localStorage.setItem('suppliersActiveTab', activeTab);
   }, [activeTab]);
 
   const handleAddSupplier = async (e: React.FormEvent) => {
@@ -124,6 +133,41 @@ export default function SuppliersPage() {
       fetchSuppliers();
     } catch (err: any) {
       setError(err.response?.data?.message || "Payment failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEditSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSupplier) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await api.patch(`/suppliers/${editingSupplier.id}`, { name: editName, contact: editContact });
+      setShowEditModal(false);
+      setEditingSupplier(null);
+      setEditName("");
+      setEditContact("");
+      fetchSuppliers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Update failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteSupplier = async () => {
+    if (!deletingSupplier) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await api.delete(`/suppliers/${deletingSupplier.id}`);
+      setShowDeleteModal(false);
+      setDeletingSupplier(null);
+      fetchSuppliers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Delete failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -311,6 +355,29 @@ export default function SuppliersPage() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
+                          setEditingSupplier(supplier);
+                          setEditName(supplier.name);
+                          setEditContact(supplier.contact);
+                          setShowEditModal(true);
+                        }}
+                        className="flex-1 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs font-bold hover:bg-zinc-800 hover:text-white transition-all flex items-center justify-center gap-2"
+                      >
+                        Edit
+                      </button>
+                      {Number(supplier.balance) === 0 && (
+                        <button
+                          onClick={() => {
+                            setDeletingSupplier(supplier);
+                            setShowDeleteModal(true);
+                          }}
+                          className="flex-1 py-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-red-400 text-xs font-bold hover:bg-red-900/20 hover:border-red-800 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Trash2 size={16} />
+                          Delete
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
                           setSelectedSupplier(supplier);
                           setPayAmount(supplier.balance.toString());
                           setPaymentMethod("CASH");
@@ -413,6 +480,109 @@ export default function SuppliersPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && deletingSupplier && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 shadow-2xl relative">
+              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 mx-auto mb-4">
+                <Trash2 className="text-red-500" size={32} />
+              </div>
+              <h2 className="text-2xl font-bold text-zinc-100 mb-2 text-center">
+                Delete Supplier?
+              </h2>
+              <p className="text-zinc-400 text-sm mb-6 text-center">
+                Are you sure you want to delete <span className="text-zinc-200 font-bold">{deletingSupplier.name}</span>? This action cannot be undone.
+              </p>
+
+              {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setDeletingSupplier(null);
+                    setError("");
+                  }}
+                  className="flex-1 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:bg-zinc-900 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteSupplier}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-500 disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="animate-spin mx-auto" />
+                  ) : (
+                    "Delete"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {showEditModal && editingSupplier && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 shadow-2xl relative">
+              <h2 className="text-2xl font-bold text-zinc-100 mb-6">
+                Edit Supplier
+              </h2>
+              <form onSubmit={handleEditSupplier} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Name
+                  </label>
+                  <input
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600"
+                    placeholder="Supplier Name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Contact
+                  </label>
+                  <input
+                    value={editContact}
+                    onChange={(e) => setEditContact(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600"
+                    placeholder="Phone / Email"
+                  />
+                </div>
+
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:bg-zinc-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="animate-spin mx-auto" />
+                    ) : (
+                      "Update"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

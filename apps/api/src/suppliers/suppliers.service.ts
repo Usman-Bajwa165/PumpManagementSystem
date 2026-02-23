@@ -23,6 +23,7 @@ export class SuppliersService {
 
   findAll() {
     return this.prisma.supplier.findMany({
+      where: { isDeleted: false },
       orderBy: { name: 'asc' },
     });
   }
@@ -187,8 +188,12 @@ export class SuppliersService {
   }
 
   remove(id: string) {
-    return this.prisma.supplier.delete({
+    return this.prisma.supplier.update({
       where: { id },
+      data: { 
+        isDeleted: true,
+        deletedAt: new Date()
+      },
     });
   }
 }

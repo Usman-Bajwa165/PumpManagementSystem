@@ -620,7 +620,9 @@ export class ReportsService {
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
 
     if (supplierId === 'ALL') {
-      const suppliers = await this.prisma.supplier.findMany();
+      const suppliers = await this.prisma.supplier.findMany({
+        where: { isDeleted: false }
+      });
       const allLedger: any[] = [];
       const summary: any[] = [];
       let totalBalance = 0;
@@ -737,7 +739,7 @@ export class ReportsService {
     }
 
     const supplier = await this.prisma.supplier.findUnique({
-      where: { id: supplierId },
+      where: { id: supplierId, isDeleted: false },
     });
     if (!supplier) throw new Error('Supplier not found');
 
