@@ -20,6 +20,9 @@ export default function BackupPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreatingFull, setIsCreatingFull] = useState(false);
+  const [nightTime, setNightTime] = useState("00:00");
+  const [dayTime, setDayTime] = useState("12:00");
+  const [syncWithShift, setSyncWithShift] = useState(false);
   const toast = useToast();
 
   const fetchBackups = async () => {
@@ -31,6 +34,33 @@ export default function BackupPage() {
       console.error(err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchConfig = async () => {
+    try {
+      const res = await api.get("/backup/config");
+      setNightTime(res.data.nightTime || "00:00");
+      setDayTime(res.data.dayTime || "12:00");
+      setSyncWithShift(res.data.syncWithShift || false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const updateConfig = async (next?: {
+    nightTime?: string;
+    dayTime?: string;
+    syncWithShift?: boolean;
+  }) => {
+    try {
+      await api.post("/backup/config", {
+        nightTime: next?.nightTime ?? nightTime,
+        dayTime: next?.dayTime ?? dayTime,
+        syncWithShift: next?.syncWithShift ?? syncWithShift,
+      });
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -88,6 +118,7 @@ export default function BackupPage() {
 
   useEffect(() => {
     fetchBackups();
+    fetchConfig();
   }, []);
 
   const formatFileSize = (bytes: number) => {
@@ -108,7 +139,7 @@ export default function BackupPage() {
                 Database Backups
               </h1>
               <p className="text-sm text-zinc-500 mt-1">
-                Automated backups run daily at 12:00 AM and 12:00 PM (PKT)
+                Automatic backups use your configured times or shift closures
               </p>
             </div>
             <div className="flex gap-3">
@@ -151,7 +182,7 @@ export default function BackupPage() {
         </div>
 
         {/* Backup Location */}
-        <div className="p-6 rounded-3xl border border-zinc-900 bg-zinc-900/40">
+        <div className="p-6 rounded-3xl border border-zinc-900 bg-zinc-900/40 space-y-4">
           <div className="flex items-center gap-3 mb-2">
             <FolderOpen className="text-zinc-500" size={20} />
             <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-wider">
@@ -161,6 +192,67 @@ export default function BackupPage() {
           <p className="text-zinc-100 font-mono text-sm bg-zinc-950/50 p-3 rounded-lg border border-zinc-800">
             {location || "Loading..."}
           </p>
+
+          <div className="mt-2 space-y-4">
+            <div className="flex items-center gap-3">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={syncWithShift}
+                  onChange={async () => {
+                    const next = !syncWithShift;
+                    setSyncWithShift(next);
+                    await updateConfig({ syncWithShift: next });
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-900 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-checked:after:bg-white" />
+              </label>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[11px] font-bold text-zinc-300">
+                  Backup When Shift Closes
+                </span>
+                <span className="text-[11px] text-zinc-500">
+                  Takes an incremental backup on each shift close
+                </span>
+              </div>
+            </div>
+
+            {!syncWithShift && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Night Backup Time
+                  </span>
+                  <input
+                    type="time"
+                    value={nightTime}
+                    onChange={(e) => {
+                      const v = e.target.value || "00:00";
+                      setNightTime(v);
+                    }}
+                    onBlur={() => updateConfig({ nightTime })}
+                    className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 outline-none focus:border-blue-600"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                    Day Backup Time
+                  </span>
+                  <input
+                    type="time"
+                    value={dayTime}
+                    onChange={(e) => {
+                      const v = e.target.value || "12:00";
+                      setDayTime(v);
+                    }}
+                    onBlur={() => updateConfig({ dayTime })}
+                    className="bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-200 outline-none focus:border-blue-600"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Backup List */}
@@ -288,7 +380,7 @@ export default function BackupPage() {
               <span className="text-blue-500 mt-0.5">•</span>
               <span>
                 <strong className="text-zinc-300">Automatic backups:</strong>{" "}
-                Run daily at 12:00 AM (Night) and 12:00 PM (Day) - Incremental data since last auto backup
+                Run daily at your configured Night and Day times - Incremental data since last auto backup
               </span>
             </li>
             <li className="flex items-start gap-2">

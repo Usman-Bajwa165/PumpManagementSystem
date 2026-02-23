@@ -175,28 +175,28 @@ model NotificationPreferences {
   id                String   @id @default(uuid())
   phoneNumber       String   @unique
   
-  // Main notification toggles (backup is always enabled)
   salesNotifications    Boolean @default(true)
   shiftNotifications    Boolean @default(true)
   inventoryNotifications Boolean @default(true)
   stockNotifications    Boolean @default(true)
   
-  // Sales notification sub-options (only if salesNotifications is true)
   notifyCash        Boolean @default(true)
   notifyCard        Boolean @default(true)
   notifyOnline      Boolean @default(true)
   notifyCredit      Boolean @default(true)
   
-  // Minimum amounts per payment method
   minCashAmount     Decimal  @default(0) @db.Decimal(10, 2)
   minCardAmount     Decimal  @default(0) @db.Decimal(10, 2)
   minOnlineAmount   Decimal  @default(0) @db.Decimal(10, 2)
   minCreditAmount   Decimal  @default(0) @db.Decimal(10, 2)
   
-  // Auto shift management
   autoCloseShift    Boolean @default(false)
+  autoShiftStartTime String  @default("00:00")
+  autoShiftEndTime   String  @default("12:00")
+  autoBackupNightTime String @default("00:00")
+  autoBackupDayTime   String @default("12:00")
+  backupOnShiftClose  Boolean @default(false)
   
-  // Low fuel alert threshold
   lowFuelThreshold  Int     @default(20) // Percentage
   
   createdAt DateTime @default(now())

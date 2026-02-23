@@ -4,7 +4,8 @@ import { CustomLogger } from '../logger/custom-logger.service';
 import { ShiftStatus } from '@prisma/client';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { ReportsService } from '../reports/reports.service';
-import { Cron } from '@nestjs/schedule';
+import { BackupService } from '../backup/backup.service';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class ShiftsService {
@@ -12,6 +13,7 @@ export class ShiftsService {
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
     private reportsService: ReportsService,
+    private backupService: BackupService,
     private logger: CustomLogger,
   ) {}
 
@@ -261,6 +263,13 @@ export class ShiftsService {
             .sendMessage(prefs.phoneNumber, msg)
             .catch(() => {});
         }
+
+        if (prefs?.backupOnShiftClose) {
+          const now = new Date();
+          const hours = now.getHours();
+          const period = hours >= 12 ? 'D' : 'N';
+          await this.backupService.performBackup(period as 'D' | 'N');
+        }
       } catch (err) {
         this.logger.error(
           'Failed to send shift closure notification',
@@ -283,22 +292,46 @@ export class ShiftsService {
 
   async getAutoCloseStatus() {
     const prefs = await this.prisma.notificationPreferences.findFirst();
-    return { enabled: prefs?.autoCloseShift || false };
+    return {
+      enabled: prefs?.autoCloseShift || false,
+      startTime: prefs?.autoShiftStartTime || '00:00',
+      endTime: prefs?.autoShiftEndTime || '12:00',
+    };
   }
 
-  async toggleAutoClose(enabled: boolean) {
+  async toggleAutoClose(
+    enabled: boolean,
+    startTime?: string,
+    endTime?: string,
+  ) {
     const prefs = await this.prisma.notificationPreferences.findFirst();
     if (!prefs) {
       throw new BadRequestException('Notification preferences not configured');
     }
+
+    const normalizedStart = (startTime || prefs.autoShiftStartTime || '00:00')
+      .slice(0, 5)
+      .padStart(5, '0');
+    const normalizedEnd = (endTime || prefs.autoShiftEndTime || '12:00')
+      .slice(0, 5)
+      .padStart(5, '0');
+
     await this.prisma.notificationPreferences.update({
       where: { id: prefs.id },
-      data: { autoCloseShift: enabled },
+      data: {
+        autoCloseShift: enabled,
+        autoShiftStartTime: normalizedStart,
+        autoShiftEndTime: normalizedEnd,
+      },
     });
-    return { enabled };
+    return {
+      enabled,
+      startTime: normalizedStart,
+      endTime: normalizedEnd,
+    };
   }
 
-  @Cron('0 0 0,12 * * *')
+  @Cron(CronExpression.EVERY_MINUTE)
   async autoCloseAndStartShift() {
     try {
       const prefs = await this.prisma.notificationPreferences.findFirst();
@@ -306,9 +339,23 @@ export class ShiftsService {
         return;
       }
 
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Karachi',
+      });
+
+      const startTime = prefs.autoShiftStartTime || '00:00';
+      const endTime = prefs.autoShiftEndTime || '12:00';
+
+      if (timeString !== startTime && timeString !== endTime) {
+        return;
+      }
+
       const openShift = await this.getCurrentShift();
 
-      // If no shift is open, start a new one
       if (!openShift) {
         this.logger.log(
           'No open shift found. Starting new shift automatically.',
@@ -317,12 +364,11 @@ export class ShiftsService {
         const users = await this.prisma.user.findMany({ take: 1 });
         if (users.length > 0) {
           await this.startShift(users[0].id);
-          this.logger.log('Auto-started new shift at 12:00', 'ShiftsService');
+          this.logger.log('Auto-started new shift', 'ShiftsService');
         }
         return;
       }
 
-      // Close existing shift with current readings
       const readings = openShift.readings.map((r) => ({
         nozzleId: r.nozzleId,
         closingReading: Number(r.nozzle.lastReading),
@@ -330,12 +376,12 @@ export class ShiftsService {
 
       const systemUserId = openShift.openerId;
       await this.closeShift(systemUserId, readings);
-      this.logger.log('Auto-closed shift at 12:00', 'ShiftsService');
+      this.logger.log('Auto-closed shift', 'ShiftsService');
 
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       await this.startShift(systemUserId);
-      this.logger.log('Auto-started new shift at 12:00', 'ShiftsService');
+      this.logger.log('Auto-started new shift', 'ShiftsService');
     } catch (err) {
       this.logger.error(
         'Auto shift management failed',

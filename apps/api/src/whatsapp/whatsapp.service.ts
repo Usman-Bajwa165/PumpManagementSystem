@@ -49,7 +49,6 @@ export class WhatsappService implements OnModuleInit {
           const phoneNumber = info.wid.user; // Phone number without @c.us
           this.logger.log(`Connected WhatsApp number: ${phoneNumber}`);
 
-          // Always update/create preferences when WhatsApp connects
           const prefs = await this.prisma.notificationPreferences.findFirst();
           if (!prefs) {
             await this.prisma.notificationPreferences.create({
@@ -68,11 +67,15 @@ export class WhatsappService implements OnModuleInit {
                 minOnlineAmount: 0,
                 minCreditAmount: 0,
                 autoCloseShift: false,
+                autoShiftStartTime: '00:00',
+                autoShiftEndTime: '12:00',
+                autoBackupNightTime: '00:00',
+                autoBackupDayTime: '12:00',
+                backupOnShiftClose: false,
               },
             });
             this.logger.log('NotificationPreferences created');
           } else {
-            // Update phone number if changed
             if (prefs.phoneNumber !== phoneNumber) {
               await this.prisma.notificationPreferences.update({
                 where: { id: prefs.id },

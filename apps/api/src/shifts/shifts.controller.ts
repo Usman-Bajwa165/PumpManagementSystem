@@ -35,8 +35,19 @@ export class ShiftsController {
 
   @Roles(Role.ADMIN, Role.MANAGER)
   @Post('toggle-auto-close')
-  async toggleAutoClose(@Body() body: { enabled: boolean }) {
-    return this.shiftsService.toggleAutoClose(body.enabled);
+  async toggleAutoClose(
+    @Body()
+    body: {
+      enabled: boolean;
+      startTime?: string;
+      endTime?: string;
+    },
+  ) {
+    return this.shiftsService.toggleAutoClose(
+      body.enabled,
+      body.startTime,
+      body.endTime,
+    );
   }
 
   @Roles(Role.ADMIN, Role.MANAGER, Role.OPERATOR)

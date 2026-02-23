@@ -37,6 +37,12 @@ interface Shift {
   readings: NozzleReading[];
 }
 
+interface AutoCloseConfig {
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+}
+
 export default function ShiftsPage() {
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,7 +52,11 @@ export default function ShiftsPage() {
     Record<string, number>
   >({});
   const [error, setError] = useState("");
-  const [autoCloseEnabled, setAutoCloseEnabled] = useState(false);
+  const [autoClose, setAutoClose] = useState<AutoCloseConfig>({
+    enabled: false,
+    startTime: "00:00",
+    endTime: "12:00",
+  });
   const toast = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
@@ -61,7 +71,11 @@ export default function ShiftsPage() {
       const shift = shiftRes.data as Shift;
       setCurrentShift(shift);
       setNozzles(nozzlesRes.data);
-      setAutoCloseEnabled(autoCloseRes.data.enabled);
+      setAutoClose({
+        enabled: autoCloseRes.data.enabled,
+        startTime: autoCloseRes.data.startTime || "00:00",
+        endTime: autoCloseRes.data.endTime || "12:00",
+      });
 
       if (shift?.readings) {
         const prefilled: Record<string, number> = {};
@@ -80,6 +94,31 @@ export default function ShiftsPage() {
   useEffect(() => {
     fetchCurrentShift();
   }, []);
+
+  const formatTimeDisplay = (value: string) => {
+    if (!value) return "--:--";
+    const [h, m] = value.split(":");
+    const date = new Date();
+    date.setHours(Number(h || 0), Number(m || 0), 0, 0);
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  };
+
+  const getShiftHours = () => {
+    const [sh, sm] = autoClose.startTime.split(":").map((v) => Number(v || 0));
+    const [eh, em] = autoClose.endTime.split(":").map((v) => Number(v || 0));
+    if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) {
+      return null;
+    }
+    const start = sh * 60 + sm;
+    const end = eh * 60 + em;
+    const diffMinutes = end >= start ? end - start : 24 * 60 - (start - end);
+    const hours = diffMinutes / 60;
+    return hours;
+  };
 
   const formatShiftTime = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -152,9 +191,13 @@ export default function ShiftsPage() {
 
   const handleToggleAutoClose = async () => {
     try {
-      const newValue = !autoCloseEnabled;
-      await api.post("/shifts/toggle-auto-close", { enabled: newValue });
-      setAutoCloseEnabled(newValue);
+      const newValue = !autoClose.enabled;
+      await api.post("/shifts/toggle-auto-close", {
+        enabled: newValue,
+        startTime: autoClose.startTime,
+        endTime: autoClose.endTime,
+      });
+      setAutoClose((prev) => ({ ...prev, enabled: newValue }));
       toast.success(
         "Auto-Close Updated",
         newValue
@@ -198,18 +241,80 @@ export default function ShiftsPage() {
           </div>
 
           <div className="p-1.5 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center gap-4 pr-6 pl-4 py-3 backdrop-blur-sm">
-            <div className="flex flex-col">
+            <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">
-                Auto-Close Shift
+                Auto Shift Schedule
               </span>
-              <span className="text-xs text-zinc-300">
-                Daily at 12:00 AM/PM
-              </span>
+              <div className="flex flex-col">
+                <span className="text-xs text-zinc-300">
+                  {formatTimeDisplay(autoClose.startTime)} –{" "}
+                  {formatTimeDisplay(autoClose.endTime)}
+                </span>
+                {getShiftHours() !== null && (
+                  <span className="text-[11px] text-zinc-500">
+                    Shift Hours: {getShiftHours()}
+                  </span>
+                )}
+              </div>
             </div>
+
+            <div className="flex items-center gap-3 ml-4">
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase text-zinc-500 font-bold tracking-wider">
+                  Start Time
+                </span>
+                <input
+                  type="time"
+                  value={autoClose.startTime}
+                  onChange={(e) =>
+                    setAutoClose((prev) => ({
+                      ...prev,
+                      startTime: e.target.value || "00:00",
+                    }))
+                  }
+                  onBlur={() => {
+                    void api
+                      .post("/shifts/toggle-auto-close", {
+                        enabled: autoClose.enabled,
+                        startTime: autoClose.startTime,
+                        endTime: autoClose.endTime,
+                      })
+                      .catch(() => {});
+                  }}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-red-600"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-[9px] uppercase text-zinc-500 font-bold tracking-wider">
+                  End Time
+                </span>
+                <input
+                  type="time"
+                  value={autoClose.endTime}
+                  onChange={(e) =>
+                    setAutoClose((prev) => ({
+                      ...prev,
+                      endTime: e.target.value || "12:00",
+                    }))
+                  }
+                  onBlur={() => {
+                    void api
+                      .post("/shifts/toggle-auto-close", {
+                        enabled: autoClose.enabled,
+                        startTime: autoClose.startTime,
+                        endTime: autoClose.endTime,
+                      })
+                      .catch(() => {});
+                  }}
+                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-red-600"
+                />
+              </div>
+            </div>
+
             <label className="relative inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
-                checked={autoCloseEnabled}
+                checked={autoClose.enabled}
                 onChange={handleToggleAutoClose}
                 className="sr-only peer"
               />

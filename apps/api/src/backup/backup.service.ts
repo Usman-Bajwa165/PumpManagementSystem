@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomLogger } from '../logger/custom-logger.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
@@ -44,14 +44,40 @@ export class BackupService {
     }
   }
 
-  @Cron('0 0 * * *')
-  async performNightBackup() {
-    await this.performBackup('N');
-  }
+  @Cron(CronExpression.EVERY_MINUTE)
+  async performScheduledBackups() {
+    try {
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      if (!prefs) {
+        return;
+      }
 
-  @Cron('0 12 * * *')
-  async performDayBackup() {
-    await this.performBackup('D');
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Karachi',
+      });
+
+      const nightTime = prefs.autoBackupNightTime || '00:00';
+      const dayTime = prefs.autoBackupDayTime || '12:00';
+
+      if (timeString === nightTime) {
+        await this.performBackup('N');
+      }
+
+      if (timeString === dayTime) {
+        await this.performBackup('D');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Scheduled backup check failed`,
+        errorMsg,
+        'BackupService',
+      );
+    }
   }
 
   @Cron('0 0 1 * *') // First day of every month at midnight
