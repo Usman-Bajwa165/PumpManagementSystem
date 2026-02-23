@@ -27,8 +27,14 @@ export class ReportsController {
 
   @Roles(Role.MANAGER, Role.ADMIN)
   @Get('balance-sheet')
-  getBalanceSheet() {
-    return this.reportsService.getBalanceSheet();
+  getBalanceSheet(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getBalanceSheet(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
   }
 
   @Roles(Role.MANAGER, Role.ADMIN)
@@ -101,13 +107,11 @@ export class ReportsController {
     @Param('id') id: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('month') month?: string,
   ) {
     return this.reportsService.getSupplierLedger(
       id,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
-      month,
     );
   }
 
@@ -117,20 +121,24 @@ export class ReportsController {
     @Param('id') id: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
-    @Query('month') month?: string,
   ) {
     return this.reportsService.getCustomerLedger(
       id,
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
-      month,
     );
   }
 
   @Roles(Role.MANAGER, Role.ADMIN)
   @Get('trial-balance')
-  getTrialBalance() {
-    return this.reportsService.getTrialBalance();
+  getTrialBalance(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getTrialBalance(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
   }
 
   @Roles(Role.MANAGER, Role.ADMIN)

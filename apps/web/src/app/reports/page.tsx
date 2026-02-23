@@ -120,9 +120,7 @@ export default function ReportsPage() {
   const [showLogs, setShowLogs] = useState(
     searchParams.get("showLogs") === "true",
   );
-  const [selectedMonth, setSelectedMonth] = useState(
-    searchParams.get("month") || new Date().toISOString().slice(0, 7),
-  );
+
 
   interface Shift {
     id: string;
@@ -176,7 +174,6 @@ export default function ReportsPage() {
       params.set("ledgerType", ledgerType);
       if (selectedEntityId) params.set("entityId", selectedEntityId);
       params.set("showLogs", showLogs.toString());
-      if (selectedMonth) params.set("month", selectedMonth);
     }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -195,7 +192,6 @@ export default function ReportsPage() {
     ledgerType,
     selectedEntityId,
     showLogs,
-    selectedMonth,
     router,
   ]);
 
@@ -207,7 +203,6 @@ export default function ReportsPage() {
 
       if (dateRange.start) params.startDate = dateRange.start;
       if (dateRange.end) params.endDate = dateRange.end;
-      if (selectedMonth) params.month = selectedMonth;
 
       switch (reportType) {
         case "PL":
@@ -317,7 +312,6 @@ export default function ReportsPage() {
     purchaseProductId,
     ledgerType,
     selectedEntityId,
-    selectedMonth,
     fetchReport,
   ]);
 
@@ -755,22 +749,6 @@ export default function ReportsPage() {
                     ),
                   )}
                 </select>
-
-                <input
-                  type="month"
-                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all"
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  placeholder="Select month"
-                />
-                {selectedMonth && (
-                  <button
-                    onClick={() => setSelectedMonth("")}
-                    className="px-3 py-2 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-500 hover:text-zinc-300 hover:border-zinc-700 transition-all"
-                  >
-                    Clear Month
-                  </button>
-                )}
               </div>
             )}
 
@@ -1333,13 +1311,6 @@ export default function ReportsPage() {
             {/* Ledger */}
             {reportType === "LEDGER" && (
               <div className="space-y-6">
-                {data?.isMonthFiltered && (
-                  <div className="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/20">
-                    <p className="text-xs text-blue-400 font-bold">
-                      📅 Month Filter Active: Showing transactions and summary for selected month only. Total balance shows current all-time balance.
-                    </p>
-                  </div>
-                )}
                 {selectedEntityId === "ALL" && data?.summary && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div className="p-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/5">

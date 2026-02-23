@@ -9,17 +9,20 @@ export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createExpenseDto: CreateExpenseDto) {
-    const { title, amount, category, description } = createExpenseDto;
+    const { title, amount, category, description, paymentMethod = 'CASH', paymentAccountId, date } = createExpenseDto;
 
-    // 1. Find Cash Account (Credit) - Assuming '10101' is Cash in Hand
-    // Better approach: Find by Type if specific code not guaranteed, but for now strict code is safer
-    let cashAccount = await this.prisma.account.findUnique({
-      where: { code: '10101' },
+    // Determine credit account based on payment method
+    let creditAccountCode = '10101'; // Default to Cash
+    if (paymentMethod === 'CARD' || paymentMethod === 'ONLINE') {
+      creditAccountCode = '10201'; // Bank Account
+    }
+
+    let creditAccount = await this.prisma.account.findUnique({
+      where: { code: creditAccountCode },
     });
 
-    if (!cashAccount) {
-      // Fallback or Error
-      throw new NotFoundException('Cash Account (10101) not found');
+    if (!creditAccount) {
+      throw new NotFoundException(`Account (${creditAccountCode}) not found`);
     }
 
     // 2. Find or Create Expense Account (Debit) based on Category
@@ -49,9 +52,10 @@ export class ExpensesService {
       const transaction = await tx.transaction.create({
         data: {
           amount,
-          description: `Expense: ${title}`,
+          description: `Expense: ${title} (${paymentMethod})`,
           debitAccountId: expenseAccount.id,
-          creditAccountId: cashAccount.id,
+          creditAccountId: creditAccount.id,
+          paymentAccountId: paymentMethod !== 'CASH' ? paymentAccountId : undefined,
         },
       });
 
@@ -62,7 +66,7 @@ export class ExpensesService {
       });
 
       await tx.account.update({
-        where: { id: cashAccount.id },
+        where: { id: creditAccount.id },
         data: { balance: { decrement: amount } }, // Asset decreases on credit
       });
 
@@ -73,16 +77,41 @@ export class ExpensesService {
           amount,
           category,
           description,
+          date: date || new Date(),
           transactionId: transaction.id,
         },
       });
     });
   }
 
-  findAll() {
+  async findAll(startDate?: Date, endDate?: Date, category?: string) {
+    const where: any = {};
+    
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date.gte = startDate;
+      if (endDate) {
+        const adjustedEnd = new Date(endDate);
+        adjustedEnd.setHours(23, 59, 59, 999);
+        where.date.lte = adjustedEnd;
+      }
+    }
+    
+    if (category && category !== 'ALL') {
+      where.category = category;
+    }
+    
     return this.prisma.expenseRecord.findMany({
+      where,
       orderBy: { date: 'desc' },
-      include: { transaction: true },
+      include: { 
+        transaction: { 
+          include: { 
+            creditAccount: true,
+            paymentAccount: true 
+          } 
+        } 
+      },
     });
   }
 
@@ -100,9 +129,39 @@ export class ExpensesService {
     });
   }
 
-  remove(id: string) {
-    return this.prisma.expenseRecord.delete({
+  async remove(id: string) {
+    const expense = await this.prisma.expenseRecord.findUnique({
       where: { id },
+      include: { transaction: { include: { debitAccount: true, creditAccount: true } } },
+    });
+
+    if (!expense) {
+      throw new NotFoundException('Expense not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Reverse account balances
+      if (expense.transaction) {
+        await tx.account.update({
+          where: { id: expense.transaction.debitAccountId },
+          data: { balance: { decrement: Number(expense.amount) } },
+        });
+
+        await tx.account.update({
+          where: { id: expense.transaction.creditAccountId },
+          data: { balance: { increment: Number(expense.amount) } },
+        });
+
+        // Delete transaction
+        await tx.transaction.delete({
+          where: { id: expense.transactionId! },
+        });
+      }
+
+      // Delete expense record
+      return tx.expenseRecord.delete({
+        where: { id },
+      });
     });
   }
 }

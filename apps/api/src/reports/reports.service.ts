@@ -70,8 +70,96 @@ export class ReportsService {
 
   // ... existing methods ...
 
-  async getBalanceSheet() {
+  async getBalanceSheet(startDate?: Date, endDate?: Date) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     const accounts = await this.prisma.account.findMany();
+
+    // If date range provided, calculate balances from transactions
+    if (startDate || adjustedEnd) {
+      const where: any = {};
+      if (startDate || adjustedEnd) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (adjustedEnd) where.createdAt.lte = adjustedEnd;
+      }
+
+      const transactions = await this.prisma.transaction.findMany({
+        where,
+        include: { debitAccount: true, creditAccount: true },
+      });
+
+      // Calculate balances for each account
+      const accountBalances = new Map<string, number>();
+      accounts.forEach(a => accountBalances.set(a.id, 0));
+
+      transactions.forEach(tx => {
+        const debitBal = accountBalances.get(tx.debitAccountId) || 0;
+        const creditBal = accountBalances.get(tx.creditAccountId) || 0;
+        accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
+        accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
+      });
+
+      const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
+      const liabilityAccounts = accounts.filter(
+        (a) => a.type === AccountType.LIABILITY,
+      );
+      const equityAccounts = accounts.filter(
+        (a) => a.type === AccountType.EQUITY,
+      );
+      const income = accounts.filter((a) => a.type === AccountType.INCOME);
+      const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
+
+      const assets: Record<string, number> = {};
+      const liabilities: Record<string, number> = {};
+      const equity: Record<string, number> = {};
+
+      assetAccounts.forEach((a) => {
+        assets[a.name] = accountBalances.get(a.id) || 0;
+      });
+
+      liabilityAccounts.forEach((a) => {
+        liabilities[a.name] = accountBalances.get(a.id) || 0;
+      });
+
+      equityAccounts.forEach((a) => {
+        equity[a.name] = accountBalances.get(a.id) || 0;
+      });
+
+      const totalAssets = Object.values(assets).reduce((s, v) => s + v, 0);
+      const totalLiabilities = Object.values(liabilities).reduce(
+        (s, v) => s + v,
+        0,
+      );
+      const totalEquity = Object.values(equity).reduce((s, v) => s + v, 0);
+      const netProfit =
+        income.reduce((sum, a) => sum + (accountBalances.get(a.id) || 0), 0) -
+        expenses.reduce((sum, a) => sum + (accountBalances.get(a.id) || 0), 0);
+
+      return {
+        assets,
+        liabilities,
+        equity,
+        totalAssets,
+        totalLiabilities,
+        totalEquity,
+        totalLiabilitiesAndEquity: totalLiabilities + totalEquity + netProfit,
+        netProfit,
+        isBalanced:
+          Math.abs(totalAssets - (totalLiabilities + totalEquity + netProfit)) <
+          1,
+        explanation: {
+          assets: 'What the business owns (Cash, Bank, Inventory, Equipment)',
+          liabilities:
+            'What the business owes (Supplier debts, Customer advances)',
+          equity: 'Owner investment and retained earnings',
+          formula: 'Assets = Liabilities + Equity + Net Profit',
+        },
+      };
+    }
+
+    // No date filter - use current balances
 
     const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
     const liabilityAccounts = accounts.filter(
@@ -604,16 +692,7 @@ export class ReportsService {
     supplierId: string,
     startDate?: Date,
     endDate?: Date,
-    month?: string,
   ) {
-    // If month is provided, set date range for that month
-    if (month) {
-      const [year, monthNum] = month.split('-').map(Number);
-      startDate = new Date(year, monthNum - 1, 1);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(year, monthNum, 0);
-      endDate.setHours(23, 59, 59, 999);
-    }
 
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
@@ -734,7 +813,6 @@ export class ReportsService {
         ledger: allLedger,
         summary,
         currentBalance: totalBalance,
-        isMonthFiltered: !!month,
       };
     }
 
@@ -821,7 +899,6 @@ export class ReportsService {
       supplier,
       ledger,
       currentBalance: Number(supplier.balance),
-      isMonthFiltered: !!month,
     };
   }
 
@@ -829,16 +906,7 @@ export class ReportsService {
     customerId: string,
     startDate?: Date,
     endDate?: Date,
-    month?: string,
   ) {
-    // If month is provided, set date range for that month
-    if (month) {
-      const [year, monthNum] = month.split('-').map(Number);
-      startDate = new Date(year, monthNum - 1, 1);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(year, monthNum, 0);
-      endDate.setHours(23, 59, 59, 999);
-    }
 
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
@@ -962,7 +1030,6 @@ export class ReportsService {
         ledger: allLedger,
         summary,
         currentBalance: totalBalance,
-        isMonthFiltered: !!month,
       };
     }
 
@@ -974,7 +1041,6 @@ export class ReportsService {
         customer: null,
         ledger: [],
         currentBalance: 0,
-        isMonthFiltered: !!month,
       };
     }
 
@@ -1062,14 +1128,78 @@ export class ReportsService {
       customer,
       ledger,
       currentBalance: Number(customer.totalCredit),
-      isMonthFiltered: !!month,
     };
   }
 
-  async getTrialBalance() {
+  async getTrialBalance(startDate?: Date, endDate?: Date) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
     const accounts = await this.prisma.account.findMany({
       orderBy: { code: 'asc' },
     });
+
+    // If date range provided, calculate balances from transactions
+    if (startDate || adjustedEnd) {
+      const where: any = {};
+      if (startDate || adjustedEnd) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (adjustedEnd) where.createdAt.lte = adjustedEnd;
+      }
+
+      const transactions = await this.prisma.transaction.findMany({
+        where,
+        include: { debitAccount: true, creditAccount: true },
+      });
+
+      // Calculate balances for each account based on transactions
+      const accountBalances = new Map<string, number>();
+      accounts.forEach(a => accountBalances.set(a.id, 0));
+
+      transactions.forEach(tx => {
+        const debitBal = accountBalances.get(tx.debitAccountId) || 0;
+        const creditBal = accountBalances.get(tx.creditAccountId) || 0;
+        accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
+        accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
+      });
+
+      const trialBalance = accounts.map((a) => {
+        const bal = accountBalances.get(a.id) || 0;
+        const isDebitNature = a.type === 'ASSET' || a.type === 'EXPENSE';
+
+        return {
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          type: a.type,
+          debit: isDebitNature ? bal : 0,
+          credit: !isDebitNature ? bal : 0,
+          balance: bal,
+        };
+      });
+
+      const totalDebit = trialBalance.reduce((s, a) => s + a.debit, 0);
+      const totalCredit = trialBalance.reduce((s, a) => s + a.credit, 0);
+
+      const grouped = {
+        ASSET: trialBalance.filter((a) => a.type === 'ASSET'),
+        LIABILITY: trialBalance.filter((a) => a.type === 'LIABILITY'),
+        EQUITY: trialBalance.filter((a) => a.type === 'EQUITY'),
+        INCOME: trialBalance.filter((a) => a.type === 'INCOME'),
+        EXPENSE: trialBalance.filter((a) => a.type === 'EXPENSE'),
+      };
+
+      return {
+        accounts: trialBalance,
+        grouped,
+        totalDebit,
+        totalCredit,
+        isBalanced: Math.abs(totalDebit - totalCredit) < 0.01,
+      };
+    }
+
+    // No date filter - use current balances
 
     const trialBalance = accounts.map((a) => {
       const bal = Number(a.balance);
@@ -1113,6 +1243,66 @@ export class ReportsService {
     const accounts = await this.prisma.account.findMany();
     const income = accounts.filter((a) => a.type === AccountType.INCOME);
     const expenses = accounts.filter((a) => a.type === AccountType.EXPENSE);
+
+    // If date range provided, calculate from transactions
+    if (startDate || adjustedEnd) {
+      const where: any = {};
+      if (startDate || adjustedEnd) {
+        where.createdAt = {};
+        if (startDate) where.createdAt.gte = startDate;
+        if (adjustedEnd) where.createdAt.lte = adjustedEnd;
+      }
+
+      const transactions = await this.prisma.transaction.findMany({
+        where,
+        include: { debitAccount: true, creditAccount: true },
+      });
+
+      // Calculate balances for income and expense accounts
+      const accountBalances = new Map<string, number>();
+      accounts.forEach(a => accountBalances.set(a.id, 0));
+
+      transactions.forEach(tx => {
+        const debitBal = accountBalances.get(tx.debitAccountId) || 0;
+        const creditBal = accountBalances.get(tx.creditAccountId) || 0;
+        accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
+        accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
+      });
+
+      const incomeBreakdown = income.map((a) => ({
+        name: a.name,
+        code: a.code,
+        amount: accountBalances.get(a.id) || 0,
+      }));
+
+      const expenseBreakdown = expenses.map((a) => ({
+        name: a.name,
+        code: a.code,
+        amount: accountBalances.get(a.id) || 0,
+      }));
+
+      const totalIncome = incomeBreakdown.reduce((sum, a) => sum + a.amount, 0);
+      const totalExpense = expenseBreakdown.reduce(
+        (sum, a) => sum + a.amount,
+        0,
+      );
+
+      return {
+        income: totalIncome,
+        expense: totalExpense,
+        netProfit: totalIncome - totalExpense,
+        incomeBreakdown,
+        expenseBreakdown,
+        explanation: {
+          income: 'Total revenue from fuel sales and other income sources',
+          expense:
+            'Total costs including fuel purchases, salaries, utilities, etc.',
+          netProfit: 'Income minus Expenses = Net Profit (or Loss if negative)',
+        },
+      };
+    }
+
+    // No date filter - use current balances
 
     const incomeBreakdown = income.map((a) => ({
       name: a.name,

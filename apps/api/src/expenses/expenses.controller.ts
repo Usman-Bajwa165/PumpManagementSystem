@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { ExpensesService } from './expenses.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
@@ -21,8 +22,16 @@ export class ExpensesController {
   }
 
   @Get()
-  findAll() {
-    return this.expensesService.findAll();
+  findAll(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('category') category?: string,
+  ) {
+    return this.expensesService.findAll(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      category,
+    );
   }
 
   @Get(':id')
