@@ -102,13 +102,46 @@ export class SalesService {
       } else if (dto.paymentMethod === 'CREDIT') {
         debitAccountCode = '10301';
 
-        // Update or create credit customer
+        // Smart customer matching: name + (vehicle OR contact)
         if (dto.customerName) {
-          let customer = await this.prisma.creditCustomer.findUnique({
-            where: { name: dto.customerName },
-          });
+          let customer: any = null;
+
+          // Try to find existing customer by vehicle number or contact
+          if (dto.vehicleNumber || dto.customerContact) {
+            const customers = await this.prisma.creditCustomer.findMany({
+              where: {
+                OR: [
+                  dto.vehicleNumber ? { vehicleNumber: dto.vehicleNumber } : {},
+                  dto.customerContact ? { contact: dto.customerContact } : {},
+                ].filter(obj => Object.keys(obj).length > 0),
+              },
+            });
+
+            // If found by vehicle/contact, check if name also matches
+            if (customers.length > 0) {
+              customer = customers.find(c => c.name === dto.customerName) || null;
+            }
+          }
+
+          // If not found by vehicle/contact, try by name only
+          if (!customer) {
+            const nameMatch = await this.prisma.creditCustomer.findUnique({
+              where: { name: dto.customerName },
+            });
+
+            // Only use name match if vehicle/contact also match (or are not provided)
+            if (nameMatch) {
+              const vehicleMatches = !dto.vehicleNumber || nameMatch.vehicleNumber === dto.vehicleNumber;
+              const contactMatches = !dto.customerContact || nameMatch.contact === dto.customerContact;
+              
+              if (vehicleMatches && contactMatches) {
+                customer = nameMatch;
+              }
+            }
+          }
 
           if (!customer) {
+            // Create new customer
             customer = await this.prisma.creditCustomer.create({
               data: {
                 name: dto.customerName,
@@ -119,8 +152,9 @@ export class SalesService {
               },
             });
           } else {
+            // Update existing customer
             await this.prisma.creditCustomer.update({
-              where: { name: dto.customerName },
+              where: { id: customer.id },
               data: {
                 totalCredit: { increment: dto.amount },
                 vehicleNumber: dto.vehicleNumber || customer.vehicleNumber,

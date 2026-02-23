@@ -1473,6 +1473,9 @@ export default function ReportsPage() {
                               <td className="px-6 py-5">
                                 <div className="flex flex-col gap-1">
                                   <span className="font-bold text-zinc-100">{item.name}</span>
+                                  {ledgerType === "CUSTOMER" && item.vehicleNumber && (
+                                    <span className="text-xs text-blue-500 font-black uppercase">🚗 {item.vehicleNumber}</span>
+                                  )}
                                   {item.contact ? (
                                     item.contact.includes('@') ? (
                                       <span className="text-xs text-zinc-500">✉️ {item.contact}</span>

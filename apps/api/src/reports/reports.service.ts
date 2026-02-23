@@ -947,6 +947,8 @@ export class ReportsService {
         summary.push({
           id: customer.id,
           name: customer.name,
+          contact: customer.contact,
+          vehicleNumber: customer.vehicleNumber,
           debit: totalCustomerDebit,
           credit: totalCustomerCredit,
           balance: Number(customer.totalCredit),
