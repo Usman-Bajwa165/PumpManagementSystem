@@ -12,6 +12,7 @@ export class WhatsappService implements OnModuleInit {
   private qrCode: string | null = null;
   private authStatus: 'pending' | 'authenticated' | 'ready' | 'failed' =
     'pending';
+  private reconnecting = false;
 
   constructor(private prisma: PrismaService) {
     this.client = new Client({
@@ -20,7 +21,15 @@ export class WhatsappService implements OnModuleInit {
       }),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu'
+        ],
       },
     });
   }
@@ -103,6 +112,22 @@ export class WhatsappService implements OnModuleInit {
       this.qrCode = null;
     });
 
+    this.client.on('disconnected', (reason) => {
+      this.logger.warn('WhatsApp Client disconnected: ' + reason);
+      this.isReady = false;
+      this.authStatus = 'pending';
+      
+      // Auto-reconnect after 5 seconds
+      setTimeout(() => {
+        if (!this.isReady && !this.reconnecting) {
+          this.logger.log('Attempting to reconnect WhatsApp client...');
+          this.handleDetachedFrame().catch(err => {
+            this.logger.error('Auto-reconnect failed: ' + err.message);
+          });
+        }
+      }, 5000);
+    });
+
     this.client.initialize().catch((err) => {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error('Failed to initialize WhatsApp client: ' + msg);
@@ -130,6 +155,13 @@ export class WhatsappService implements OnModuleInit {
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send message to ${to}: ${err.message}`);
+      
+      // Handle detached frame error
+      if (err.message?.includes('detached Frame') || err.message?.includes('Execution context was destroyed')) {
+        this.logger.warn('Detached frame detected. Attempting to reconnect...');
+        await this.handleDetachedFrame();
+      }
+      
       await this.queueMessage(to, message);
       return false;
     }
@@ -149,13 +181,20 @@ export class WhatsappService implements OnModuleInit {
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send file to ${to}: ${err.message}`);
+      
+      // Handle detached frame error
+      if (err.message?.includes('detached Frame') || err.message?.includes('Execution context was destroyed')) {
+        this.logger.warn('Detached frame detected. Attempting to reconnect...');
+        await this.handleDetachedFrame();
+      }
+      
       return false;
     }
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
   async processQueue() {
-    if (!this.isReady) return;
+    if (!this.isReady || this.reconnecting) return;
 
     const pending = await this.prisma.notificationQueue.findMany({
       where: { status: 'PENDING', retries: { lt: 5 } },
@@ -172,6 +211,13 @@ export class WhatsappService implements OnModuleInit {
         });
         this.logger.log(`Queued message sent to ${item.to}`);
       } catch (err: any) {
+        // Handle detached frame in queue processing
+        if (err.message?.includes('detached Frame') || err.message?.includes('Execution context was destroyed')) {
+          this.logger.warn('Detached frame in queue processing. Stopping queue and reconnecting...');
+          await this.handleDetachedFrame();
+          break; // Stop processing queue
+        }
+        
         await this.prisma.notificationQueue.update({
           where: { id: item.id },
           data: {
@@ -370,5 +416,50 @@ export class WhatsappService implements OnModuleInit {
       qrCode: this.qrCode,
       status: this.authStatus,
     };
+  }
+
+  private async handleDetachedFrame() {
+    if (this.reconnecting) {
+      this.logger.warn('Reconnection already in progress...');
+      return;
+    }
+
+    this.reconnecting = true;
+    this.isReady = false;
+    this.authStatus = 'pending';
+
+    try {
+      this.logger.log('Destroying current WhatsApp client...');
+      await this.client.destroy();
+      
+      this.logger.log('Waiting 3 seconds before reinitializing...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      this.logger.log('Reinitializing WhatsApp client...');
+      this.client = new Client({
+        authStrategy: new LocalAuth({
+          dataPath: './.wwebjs_auth',
+        }),
+        puppeteer: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+          ],
+        },
+      });
+      
+      this.initialize();
+      this.logger.log('WhatsApp client reinitialized successfully');
+    } catch (err) {
+      this.logger.error('Failed to reinitialize WhatsApp client: ' + (err as Error).message);
+    } finally {
+      this.reconnecting = false;
+    }
   }
 }

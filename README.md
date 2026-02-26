@@ -36,8 +36,26 @@ npm run dev
 - Shift management
 - Inventory tracking
 - Automated accounting
-- WhatsApp notifications
+- WhatsApp notifications (with auto-recovery)
 - PDF backups
+
+## 📚 Documentation
+- [Setup Guide (Windows)](./SETUP-WINDOWS.md)
+- [Setup Guide (Mac)](./SETUP-MAC.md)
+- [Client Deployment](./CLIENT-DEPLOYMENT.md)
+- [Reports Documentation](./REPORTS-DOCUMENTATION.md)
+- [Chart of Accounts](./CHART-OF-ACCOUNTS-EXPLAINED.md)
+- [WhatsApp Fix Guide](./WHATSAPP-FIX-GUIDE.md) ⭐ NEW
+- [WhatsApp Monitor](./WHATSAPP-MONITOR.md) ⭐ NEW
+
+## 🔧 Troubleshooting
+
+### WhatsApp Notifications Not Working?
+See [WHATSAPP-FIX-GUIDE.md](./WHATSAPP-FIX-GUIDE.md) for:
+- Automatic error recovery
+- Connection monitoring
+- Queue management
+- Common issues and solutions
 
 ---
 © 2026 Petrol Pump Management System

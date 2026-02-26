@@ -215,6 +215,16 @@ export default function SalesPage() {
       return;
     }
 
+    if (!amount || Number(amount) <= 0) {
+      toast.warning("Amount Required", "Please enter a valid amount");
+      return;
+    }
+
+    if (!quantity || Number(quantity) <= 0) {
+      toast.warning("Quantity Required", "Please enter a valid quantity");
+      return;
+    }
+
     if (paymentMethod === "CREDIT" && (!customerName || !vehicleNumber || !customerContact)) {
       toast.warning(
         "Details Required",
@@ -610,12 +620,14 @@ export default function SalesPage() {
                 <div className="grid grid-cols-2 gap-6">
                   <div className="space-y-3">
                     <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                      Amount (Rs.)
+                      Amount (Rs.) <span className="text-red-500">*</span>
                     </label>
                     <input
                       ref={amountRef}
+                      required
                       type="number"
                       step="any"
+                      min="0.01"
                       value={amount}
                       onChange={(e) => {
                         setAmount(e.target.value);
@@ -634,12 +646,14 @@ export default function SalesPage() {
                   </div>
                   <div className="space-y-3">
                     <label className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                      Quantity (L)
+                      Quantity (L) <span className="text-red-500">*</span>
                     </label>
                     <input
                       ref={quantityRef}
+                      required
                       type="number"
                       step="any"
+                      min="0.01"
                       value={quantity}
                       onChange={(e) => {
                         setQuantity(e.target.value);
@@ -801,13 +815,6 @@ export default function SalesPage() {
                               setRegularSelectedDropdownIndex(-1);
                             }}
                             onFocus={() => setShowRegularCustomerDropdown(true)}
-                            onBlur={() => {
-                              // Auto-fill "New Customer" if field is empty
-                              if (!regularCustomerSearch.trim()) {
-                                setRegularCustomerSearch("New Customer");
-                                setCustomerName("New Customer");
-                              }
-                            }}
                             onKeyDown={(e) => {
                               if (!showRegularCustomerDropdown) return;
                               const filteredCustomers = regularCustomerSearch
@@ -891,19 +898,12 @@ export default function SalesPage() {
                                   key={c.name}
                                   type="button"
                                   onClick={() => {
-                                    const selected = c;
                                     setRegularCustomerSearch(c.name);
                                     setShowRegularCustomerDropdown(false);
-                                    setCustomerName("");
-                                    setVehicleNumber("");
-                                    setCustomerContact("");
-                                    setCustomerEmail("");
-                                    if (selected) {
-                                      setCustomerName(selected.name);
-                                      if (selected.vehicle) setVehicleNumber(selected.vehicle);
-                                      if (selected.contact) setCustomerContact(selected.contact);
-                                      if (selected.email) setCustomerEmail(selected.email);
-                                    }
+                                    setCustomerName(c.name);
+                                    if (c.vehicle) setVehicleNumber(c.vehicle);
+                                    if (c.contact) setCustomerContact(c.contact);
+                                    if (c.email) setCustomerEmail(c.email);
                                     setRegularSelectedDropdownIndex(-1);
                                   }}
                                   className={cn(
