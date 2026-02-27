@@ -56,9 +56,9 @@ const navItems = [
     roles: ["ADMIN", "MANAGER"],
   },
   {
-    name: "Expenses",
-    href: "/expenses",
-    icon: Receipt,
+    name: "Finance",
+    href: "/finance",
+    icon: Wallet,
     roles: ["ADMIN", "MANAGER"],
   },
   {

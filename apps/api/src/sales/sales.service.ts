@@ -113,13 +113,14 @@ export class SalesService {
                 OR: [
                   dto.vehicleNumber ? { vehicleNumber: dto.vehicleNumber } : {},
                   dto.customerContact ? { contact: dto.customerContact } : {},
-                ].filter(obj => Object.keys(obj).length > 0),
+                ].filter((obj) => Object.keys(obj).length > 0),
               },
             });
 
             // If found by vehicle/contact, check if name also matches
             if (customers.length > 0) {
-              customer = customers.find(c => c.name === dto.customerName) || null;
+              customer =
+                customers.find((c) => c.name === dto.customerName) || null;
             }
           }
 
@@ -131,9 +132,13 @@ export class SalesService {
 
             // Only use name match if vehicle/contact also match (or are not provided)
             if (nameMatch) {
-              const vehicleMatches = !dto.vehicleNumber || nameMatch.vehicleNumber === dto.vehicleNumber;
-              const contactMatches = !dto.customerContact || nameMatch.contact === dto.customerContact;
-              
+              const vehicleMatches =
+                !dto.vehicleNumber ||
+                nameMatch.vehicleNumber === dto.vehicleNumber;
+              const contactMatches =
+                !dto.customerContact ||
+                nameMatch.contact === dto.customerContact;
+
               if (vehicleMatches && contactMatches) {
                 customer = nameMatch;
               }
@@ -300,6 +305,7 @@ export class SalesService {
         where: { totalCredit: { gt: 0 } },
         orderBy: { name: 'asc' },
         select: {
+          id: true,
           name: true,
           vehicleNumber: true,
           contact: true,
@@ -309,6 +315,7 @@ export class SalesService {
       })
       .then((customers) =>
         customers.map((c) => ({
+          id: c.id,
           name: c.name,
           vehicle: c.vehicleNumber,
           contact: c.contact,

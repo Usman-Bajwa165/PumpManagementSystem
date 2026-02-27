@@ -55,7 +55,7 @@ export class ReportsController {
     return this.reportsService.getDailySaleSummary(shiftId);
   }
 
-  @Roles(Role.MANAGER, Role.ADMIN)
+  @Roles(Role.MANAGER, Role.ADMIN, Role.OPERATOR)
   @Get('dashboard-summary')
   getDashboardSummary() {
     return this.reportsService.getDashboardSummary();
@@ -142,6 +142,18 @@ export class ReportsController {
   }
 
   @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('other-income')
+  getOtherIncomeReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.reportsService.getOtherIncomeReport(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
   @Get('invoice/:type/:id')
   async generateInvoice(
     @Param('type') type: string,
@@ -150,7 +162,22 @@ export class ReportsController {
   ) {
     const pdfBuffer = await this.reportsService.generateInvoice(type, id);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=invoice-${id}.pdf`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=invoice-${id}.pdf`,
+    );
     res.send(pdfBuffer);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('send-reminder/:customerId')
+  async sendReminder(@Param('customerId') customerId: string) {
+    return this.reportsService.sendCreditReminder(customerId);
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('send-invoice/:customerId')
+  async sendInvoice(@Param('customerId') customerId: string) {
+    return this.reportsService.sendCreditInvoice(customerId);
   }
 }

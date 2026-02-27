@@ -306,52 +306,38 @@ export default function SalesPage() {
   const selectedNozzleData = nozzles.find((n) => n.id === selectedNozzle);
 
   return (
-    <DashboardLayout>
-      <div className="max-w-4xl mx-auto space-y-8 p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
-              Record Sale
-            </h1>
-            <p className="text-zinc-500 mt-1 flex items-center gap-2">
-              <Receipt size={16} />
-              New Transaction Entry
-            </p>
-          </div>
-          {shiftOpen && (
-            <div className="px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Shift Active
-            </div>
-          )}
-        </div>
-
+    <DashboardLayout title="Record Sale">
+      <div className="h-full flex flex-col">
         {!shiftOpen ? (
-          <div className="p-12 rounded-3xl border border-dashed border-amber-500/30 bg-amber-500/5 text-amber-500 flex flex-col items-center gap-6 text-center animate-in fade-in zoom-in duration-500">
-            <div className="p-4 rounded-full bg-amber-500/10">
-              <AlertCircle size={48} />
+          <div className="h-full flex items-center justify-center p-12">
+            <div className="max-w-md w-full rounded-3xl border border-dashed border-amber-500/30 bg-amber-500/5 text-amber-500 flex flex-col items-center gap-6 text-center p-12 animate-in fade-in zoom-in duration-500">
+              <div className="p-4 rounded-full bg-amber-500/10">
+                <AlertCircle size={48} />
+              </div>
+              <div className="space-y-2">
+                <h2 className="font-bold text-2xl text-amber-400">
+                  Shift Not Started
+                </h2>
+                <p className="opacity-80">
+                  You must start a new shift before you can begin recording sales
+                  transactions.
+                </p>
+              </div>
+              <a
+                href="/shifts"
+                className="px-8 py-3 rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 hover:scale-105 transition-all shadow-lg shadow-amber-500/20"
+              >
+                Start Shift Now
+              </a>
             </div>
-            <div className="space-y-2">
-              <h2 className="font-bold text-2xl text-amber-400">
-                Shift Not Started
-              </h2>
-              <p className="opacity-80 max-w-md mx-auto">
-                You must start a new shift before you can begin recording sales
-                transactions.
-              </p>
-            </div>
-            <a
-              href="/shifts"
-              className="px-8 py-3 rounded-xl bg-amber-500 text-black font-bold hover:bg-amber-400 hover:scale-105 transition-all shadow-lg shadow-amber-500/20"
-            >
-              Start Shift Now
-            </a>
           </div>
         ) : (
-          <form
-            onSubmit={handleSubmit}
-            className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-md shadow-2xl space-y-8"
-          >
+          <div className="h-full overflow-y-auto">
+            <div className="max-w-4xl mx-auto p-6">
+              <form
+                onSubmit={handleSubmit}
+                className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/60 backdrop-blur-md shadow-2xl space-y-8"
+              >
             {/* Header / Toggle */}
             <div className="flex items-center justify-between pb-6 border-b border-zinc-800">
               <div className="space-y-1">
@@ -1055,7 +1041,9 @@ export default function SalesPage() {
               )}
               {isCreditPayment ? "Clear Credit Balance" : "Record Transaction"}
             </button>
-          </form>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </DashboardLayout>

@@ -28,14 +28,19 @@ interface Supplier {
 }
 
 interface CreditCustomer {
+  id: string;
   name: string;
   vehicle: string;
   amount: number;
+  contact?: string;
+  email?: string;
 }
 
 export default function SuppliersPage() {
   const [activeTab, setActiveTab] = useState<"suppliers" | "credit">(
-    (typeof window !== 'undefined' && (localStorage.getItem('suppliersActiveTab') as any)) || "suppliers",
+    (typeof window !== "undefined" &&
+      (localStorage.getItem("suppliersActiveTab") as any)) ||
+      "suppliers",
   );
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [creditCustomers, setCreditCustomers] = useState<CreditCustomer[]>([]);
@@ -52,8 +57,18 @@ export default function SuppliersPage() {
   const [editName, setEditName] = useState("");
   const [editContact, setEditContact] = useState("");
 
+  const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<CreditCustomer | null>(
+    null,
+  );
+  const [editCustomerVehicle, setEditCustomerVehicle] = useState("");
+  const [editCustomerContact, setEditCustomerContact] = useState("");
+  const [editCustomerEmail, setEditCustomerEmail] = useState("");
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(
+    null,
+  );
 
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(
@@ -118,7 +133,7 @@ export default function SuppliersPage() {
     } else {
       fetchCreditCustomers();
     }
-    localStorage.setItem('suppliersActiveTab', activeTab);
+    localStorage.setItem("suppliersActiveTab", activeTab);
   }, [activeTab]);
 
   const handleAddSupplier = async (e: React.FormEvent) => {
@@ -144,7 +159,10 @@ export default function SuppliersPage() {
     setIsSubmitting(true);
     setError("");
     try {
-      await api.patch(`/suppliers/${editingSupplier.id}`, { name: editName, contact: editContact });
+      await api.patch(`/suppliers/${editingSupplier.id}`, {
+        name: editName,
+        contact: editContact,
+      });
       setShowEditModal(false);
       setEditingSupplier(null);
       setEditName("");
@@ -223,6 +241,27 @@ export default function SuppliersPage() {
     }
   };
 
+  const handleEditCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await api.patch(`/credit-customers/${editingCustomer.id}`, {
+        vehicleNumber: editCustomerVehicle,
+        contact: editCustomerContact,
+        email: editCustomerEmail,
+      });
+      setShowEditCustomerModal(false);
+      setEditingCustomer(null);
+      fetchCreditCustomers();
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Update failed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const filteredSuppliers = suppliers.filter((s) =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
@@ -239,7 +278,7 @@ export default function SuppliersPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-linear-to-r from-zinc-100 to-zinc-400 tracking-tight">
               Supplier Management
             </h1>
             <p className="text-zinc-500 mt-1 flex items-center gap-2">
@@ -446,14 +485,42 @@ export default function SuppliersPage() {
                     {customer.name}
                   </h3>
 
-                  <div className="flex items-center gap-2 text-zinc-500 text-sm mb-6">
+                  <div className="flex items-center gap-2 text-zinc-500 text-sm mb-2">
                     <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-400 uppercase text-[10px] font-bold">
                       Vehicle
                     </span>
                     {customer.vehicle || "N/A"}
                   </div>
 
+                  <div className="flex flex-col gap-2 mb-6">
+                    <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                      <Phone size={14} />
+                      {customer.contact || "No contact info"}
+                    </div>
+                    {customer.email && (
+                      <div className="flex items-center gap-2 text-zinc-500 text-sm">
+                        <Users size={14} />
+                        {customer.email}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex gap-2">
+                    {!isReadOnly && (
+                      <button
+                        onClick={() => {
+                          setEditingCustomer(customer);
+                          setEditCustomerVehicle(customer.vehicle || "");
+                          setEditCustomerContact(customer.contact || "");
+                          setEditCustomerEmail(customer.email || "");
+                          setShowEditCustomerModal(true);
+                        }}
+                        className="p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white transition-all flex items-center justify-center"
+                        title="Edit Details"
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setSelectedCreditCustomer(customer);
@@ -494,10 +561,16 @@ export default function SuppliersPage() {
                 Delete Supplier?
               </h2>
               <p className="text-zinc-400 text-sm mb-6 text-center">
-                Are you sure you want to delete <span className="text-zinc-200 font-bold">{deletingSupplier.name}</span>? This action cannot be undone.
+                Are you sure you want to delete{" "}
+                <span className="text-zinc-200 font-bold">
+                  {deletingSupplier.name}
+                </span>
+                ? This action cannot be undone.
               </p>
 
-              {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+              {error && (
+                <p className="text-red-500 text-sm mb-4 text-center">{error}</p>
+              )}
 
               <div className="flex gap-4">
                 <button
@@ -523,6 +596,84 @@ export default function SuppliersPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Customer Modal */}
+        {showEditCustomerModal && editingCustomer && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
+            <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-3xl p-8 shadow-2xl relative">
+              <h2 className="text-2xl font-bold text-zinc-100 mb-6 font-display">
+                Edit Customer Details
+              </h2>
+              <form onSubmit={handleEditCustomer} className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Vehicle Number
+                  </label>
+                  <input
+                    value={editCustomerVehicle}
+                    onChange={(e) => setEditCustomerVehicle(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600 transition-all"
+                    placeholder="Vehicle Number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Contact Number
+                  </label>
+                  <input
+                    value={editCustomerContact}
+                    onChange={(e) => setEditCustomerContact(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600 transition-all font-mono"
+                    placeholder="Phone Number"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={editCustomerEmail}
+                    onChange={(e) => setEditCustomerEmail(e.target.value)}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-200 outline-none focus:border-blue-600 transition-all"
+                    placeholder="customer@email.com (optional)"
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditCustomerModal(false);
+                      setEditingCustomer(null);
+                      setError("");
+                    }}
+                    className="flex-1 py-3 rounded-xl border border-zinc-800 text-zinc-500 hover:bg-zinc-900 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 disabled:opacity-50 transition-all shadow-lg shadow-blue-900/20"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="animate-spin mx-auto scale-75" />
+                    ) : (
+                      "Update Details"
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

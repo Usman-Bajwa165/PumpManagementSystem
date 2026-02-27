@@ -17,13 +17,21 @@ import {
   Search,
   Calendar,
   Download,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useSearchParams, useRouter } from "next/navigation";
 
-type ReportType = "PL" | "BS" | "SALES" | "PURCHASE" | "LEDGER" | "TRIAL";
+type ReportType =
+  | "PL"
+  | "BS"
+  | "SALES"
+  | "PURCHASE"
+  | "LEDGER"
+  | "TRIAL"
+  | "INCOME";
 type SalesViewMode =
   | "DAILY_SUMMARY"
   | "SHIFT_WISE"
@@ -120,7 +128,6 @@ export default function ReportsPage() {
   const [showLogs, setShowLogs] = useState(
     searchParams.get("showLogs") === "true",
   );
-
 
   interface Shift {
     id: string;
@@ -230,6 +237,9 @@ export default function ReportsPage() {
         case "TRIAL":
           endpoint = "/reports/trial-balance";
           break;
+        case "INCOME":
+          endpoint = "/reports/other-income";
+          break;
         case "LEDGER":
           if (!selectedEntityId) {
             setData(null);
@@ -320,6 +330,7 @@ export default function ReportsPage() {
     { id: "BS", label: "Balance Sheet", icon: Scale },
     { id: "SALES", label: "Sales Report", icon: ShoppingCart },
     { id: "PURCHASE", label: "Purchase Report", icon: Truck },
+    { id: "INCOME", label: "Other Income", icon: TrendingUp },
     { id: "LEDGER", label: "Ledgers", icon: BookOpen },
     { id: "TRIAL", label: "Trial Balance", icon: FileText },
   ];
@@ -328,8 +339,8 @@ export default function ReportsPage() {
     if (!data) return;
     const doc = new jsPDF();
     const title = tabs.find((t) => t.id === reportType)?.label || "Report";
-    const date = new Date().toISOString().split('T')[0];
-    const filename = `${title.replace(/\s+/g, '_')}_${date}.pdf`;
+    const date = new Date().toISOString().split("T")[0];
+    const filename = `${title.replace(/\s+/g, "_")}_${date}.pdf`;
 
     // Professional Header with styling
     doc.setFillColor(24, 24, 27); // Zinc-950
@@ -472,6 +483,15 @@ export default function ReportsPage() {
         `Rs. ${(data.totalDebit || 0).toLocaleString()}`,
         `Rs. ${(data.totalCredit || 0).toLocaleString()}`,
       ]);
+    } else if (reportType === "INCOME") {
+      columns = ["Date", "Description", "Account", "Paid Via", "Amount"];
+      tableData = data.map((r: any) => [
+        formatDate(r.date),
+        r.description,
+        r.account,
+        r.paidVia,
+        `Rs. ${r.amount.toLocaleString()}`,
+      ]);
     }
 
     autoTable(doc, {
@@ -520,7 +540,7 @@ export default function ReportsPage() {
               key={tab.id}
               onClick={() => {
                 setReportType(tab.id);
-                setData(null);
+                // Don't clear data immediately to allow smoother transition
               }}
               className={cn(
                 "px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap border",
@@ -841,8 +861,8 @@ export default function ReportsPage() {
                     className={cn(
                       "p-8 rounded-[32px] border card-hover",
                       data.netProfit >= 0
-                        ? "bg-zinc-100 border-zinc-200 text-zinc-900"
-                        : "bg-rose-600 border-rose-500 text-white",
+                        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                        : "bg-rose-500/10 border-rose-500/20 text-rose-500",
                     )}
                   >
                     <div className="flex justify-between items-start mb-4">
@@ -850,23 +870,25 @@ export default function ReportsPage() {
                         className={cn(
                           "p-3 rounded-2xl",
                           data.netProfit >= 0
-                            ? "bg-zinc-900 text-zinc-100"
-                            : "bg-white/20 text-white",
+                            ? "bg-emerald-500/20 text-emerald-500"
+                            : "bg-rose-500/20 text-rose-500",
                         )}
                       >
                         <Activity size={24} />
                       </div>
                     </div>
+                    <p className="text-zinc-500 text-sm font-bold uppercase tracking-wider mb-1">
+                      {data.netProfit >= 0 ? "Net Profit" : "Net Loss"}
+                    </p>
                     <p
                       className={cn(
-                        "text-sm font-bold uppercase tracking-wider mb-1",
-                        data.netProfit >= 0 ? "text-zinc-500" : "text-white/70",
+                        "text-3xl font-black font-mono italic",
+                        data.netProfit >= 0
+                          ? "text-emerald-500"
+                          : "text-rose-500",
                       )}
                     >
-                      Net Profit / Loss
-                    </p>
-                    <p className="text-3xl font-black font-mono italic">
-                      Rs. {(data.netProfit || 0).toLocaleString()}
+                      Rs. {Math.abs(data.netProfit || 0).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -1320,15 +1342,25 @@ export default function ReportsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-bold uppercase tracking-wider text-emerald-500/70">
-                            {ledgerType === "CUSTOMER" ? "Total Receivable" : "Total Payable"}
+                            {ledgerType === "CUSTOMER"
+                              ? "Total Receivable"
+                              : "Total Payable"}
                           </p>
                           <p className="text-3xl font-black text-emerald-500 font-mono italic">
-                            Rs. {data.summary.reduce((sum: number, item: any) => sum + item.balance, 0).toLocaleString()}
+                            Rs.{" "}
+                            {data.summary
+                              .reduce(
+                                (sum: number, item: any) => sum + item.balance,
+                                0,
+                              )
+                              .toLocaleString()}
                           </p>
                         </div>
                       </div>
                       <p className="text-xs text-zinc-500">
-                        {ledgerType === "CUSTOMER" ? "Amount to be received from customers" : "Amount to be paid to suppliers"}
+                        {ledgerType === "CUSTOMER"
+                          ? "Amount to be received from customers"
+                          : "Amount to be paid to suppliers"}
                       </p>
                     </div>
                     <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/40">
@@ -1338,7 +1370,10 @@ export default function ReportsPage() {
                         </div>
                         <div>
                           <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                            Total {ledgerType === "CUSTOMER" ? "Customers" : "Suppliers"}
+                            Total{" "}
+                            {ledgerType === "CUSTOMER"
+                              ? "Customers"
+                              : "Suppliers"}
                           </p>
                           <p className="text-3xl font-black text-zinc-100 font-mono italic">
                             {data.summary.length}
@@ -1354,9 +1389,7 @@ export default function ReportsPage() {
                 {selectedEntityId === "ALL" && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                      <button
-                        className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-100 text-zinc-950"
-                      >
+                      <button className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-100 text-zinc-950">
                         Summary View
                       </button>
                     </div>
@@ -1377,19 +1410,32 @@ export default function ReportsPage() {
                       <button
                         onClick={async () => {
                           try {
-                            const entityName = ledgerType === "SUPPLIER" ? data?.supplier?.name : data?.customer?.name;
-                            const response = await api.get(`/reports/invoice/${ledgerType.toLowerCase()}/${selectedEntityId}`, { responseType: 'blob' });
-                            const url = window.URL.createObjectURL(new Blob([response.data]));
-                            const link = document.createElement('a');
+                            const entityName =
+                              ledgerType === "SUPPLIER"
+                                ? data?.supplier?.name
+                                : data?.customer?.name;
+                            const response = await api.get(
+                              `/reports/invoice/${ledgerType.toLowerCase()}/${selectedEntityId}`,
+                              { responseType: "blob" },
+                            );
+                            const url = window.URL.createObjectURL(
+                              new Blob([response.data]),
+                            );
+                            const link = document.createElement("a");
                             link.href = url;
-                            const date = new Date().toISOString().split('T')[0];
-                            link.setAttribute('download', `INV_${entityName?.replace(/\s+/g, '_')}_${date}.pdf`);
+                            const date = new Date().toISOString().split("T")[0];
+                            link.setAttribute(
+                              "download",
+                              `INV_${entityName?.replace(/\s+/g, "_")}_${date}.pdf`,
+                            );
                             document.body.appendChild(link);
                             link.click();
                             link.remove();
                           } catch (error) {
-                            console.error('Failed to download invoice:', error);
-                            alert('Failed to generate invoice. Please try again.');
+                            console.error("Failed to download invoice:", error);
+                            alert(
+                              "Failed to generate invoice. Please try again.",
+                            );
                           }
                         }}
                         className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-blue-600 text-white hover:bg-blue-500"
@@ -1424,13 +1470,19 @@ export default function ReportsPage() {
                                 : "Customer Name"}
                             </th>
                             <th className="px-6 py-5 text-right">
-                            {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Received)"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Debit (Paid)"
+                                : "Credit (Received)"}
                             </th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                            {ledgerType === "SUPPLIER" ? "Credit (Purchased)" : "Debit (Purchased)"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Credit (Purchased)"
+                                : "Debit (Purchased)"}
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
-                              {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Payable"
+                                : "Receivable"}
                             </th>
                             <th className="px-6 py-5 text-center">Action</th>
                           </tr>
@@ -1443,18 +1495,29 @@ export default function ReportsPage() {
                             >
                               <td className="px-6 py-5">
                                 <div className="flex flex-col gap-1">
-                                  <span className="font-bold text-zinc-100">{item.name}</span>
-                                  {ledgerType === "CUSTOMER" && item.vehicleNumber && (
-                                    <span className="text-xs text-blue-500 font-black uppercase">🚗 {item.vehicleNumber}</span>
-                                  )}
+                                  <span className="font-bold text-zinc-100">
+                                    {item.name}
+                                  </span>
+                                  {ledgerType === "CUSTOMER" &&
+                                    item.vehicleNumber && (
+                                      <span className="text-xs text-blue-500 font-black uppercase">
+                                        🚗 {item.vehicleNumber}
+                                      </span>
+                                    )}
                                   {item.contact ? (
-                                    item.contact.includes('@') ? (
-                                      <span className="text-xs text-zinc-500">✉️ {item.contact}</span>
+                                    item.contact.includes("@") ? (
+                                      <span className="text-xs text-zinc-500">
+                                        ✉️ {item.contact}
+                                      </span>
                                     ) : (
-                                      <span className="text-xs text-zinc-500">📞 {item.contact}</span>
+                                      <span className="text-xs text-zinc-500">
+                                        📞 {item.contact}
+                                      </span>
                                     )
                                   ) : (
-                                    <span className="text-xs text-zinc-600">📞 No contact</span>
+                                    <span className="text-xs text-zinc-600">
+                                      📞 No contact
+                                    </span>
                                   )}
                                 </div>
                               </td>
@@ -1485,24 +1548,96 @@ export default function ReportsPage() {
                                   <button
                                     onClick={async () => {
                                       try {
-                                        const response = await api.get(`/reports/invoice/${ledgerType.toLowerCase()}/${item.id}`, { responseType: 'blob' });
-                                        const url = window.URL.createObjectURL(new Blob([response.data]));
-                                        const link = document.createElement('a');
+                                        const response = await api.get(
+                                          `/reports/invoice/${ledgerType.toLowerCase()}/${item.id}`,
+                                          { responseType: "blob" },
+                                        );
+                                        const url = window.URL.createObjectURL(
+                                          new Blob([response.data]),
+                                        );
+                                        const link =
+                                          document.createElement("a");
                                         link.href = url;
-                                        const date = new Date().toISOString().split('T')[0];
-                                        link.setAttribute('download', `INV_${item.name.replace(/\s+/g, '_')}_${date}.pdf`);
+                                        const date = new Date()
+                                          .toISOString()
+                                          .split("T")[0];
+                                        link.setAttribute(
+                                          "download",
+                                          `INV_${item.name.replace(/\s+/g, "_")}_${date}.pdf`,
+                                        );
                                         document.body.appendChild(link);
                                         link.click();
                                         link.remove();
                                       } catch (error) {
-                                        console.error('Failed to download invoice:', error);
-                                        alert('Failed to generate invoice. Please try again.');
+                                        console.error(
+                                          "Failed to download invoice:",
+                                          error,
+                                        );
+                                        alert(
+                                          "Failed to generate invoice. Please try again.",
+                                        );
                                       }
                                     }}
                                     className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-[10px] font-black text-white hover:bg-blue-500 transition-all uppercase"
                                   >
                                     Invoice
                                   </button>
+                                  {ledgerType === "CUSTOMER" && (
+                                    <>
+                                      <button
+                                        onClick={async () => {
+                                          if (
+                                            !confirm(
+                                              "Send WhatsApp reminder to this customer?",
+                                            )
+                                          )
+                                            return;
+                                          try {
+                                            await api.get(
+                                              `/reports/send-reminder/${item.id}`,
+                                            );
+                                            alert(
+                                              "Reminder sent successfully!",
+                                            );
+                                          } catch (error) {
+                                            alert(
+                                              "Failed to send reminder via WhatsApp.",
+                                            );
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 border border-emerald-500 text-[10px] font-black text-white hover:bg-emerald-500 transition-all uppercase flex items-center gap-1"
+                                      >
+                                        <MessageCircle size={12} />
+                                        WhatsApp
+                                      </button>
+                                      <button
+                                        onClick={async () => {
+                                          if (
+                                            !confirm(
+                                              "Send PDF invoice via WhatsApp to this customer?",
+                                            )
+                                          )
+                                            return;
+                                          try {
+                                            await api.get(
+                                              `/reports/send-invoice/${item.id}`,
+                                            );
+                                            alert(
+                                              "Invoice sent successfully via WhatsApp!",
+                                            );
+                                          } catch (error) {
+                                            alert(
+                                              "Failed to send invoice via WhatsApp.",
+                                            );
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 rounded-lg bg-emerald-950 border border-emerald-800 text-[10px] font-black text-emerald-400 hover:bg-emerald-900 transition-all uppercase flex items-center gap-1"
+                                      >
+                                        <FileText size={12} />
+                                        WhatsApp
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1530,13 +1665,19 @@ export default function ReportsPage() {
                             <th className="px-6 py-5">Date</th>
                             <th className="px-6 py-5">Flow Description</th>
                             <th className="px-6 py-5 text-right">
-                              {ledgerType === "SUPPLIER" ? "Debit (Paid)" : "Credit (Received)"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Debit (Paid)"
+                                : "Credit (Received)"}
                             </th>
                             <th className="px-6 py-5 text-right text-emerald-500">
-                              {ledgerType === "SUPPLIER" ? "Credit (Payments)" : "Debit (Purchased)"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Credit (Payments)"
+                                : "Debit (Purchased)"}
                             </th>
                             <th className="px-6 py-5 text-right text-zinc-100">
-                              {ledgerType === "SUPPLIER" ? "Payable" : "Receivable"}
+                              {ledgerType === "SUPPLIER"
+                                ? "Payable"
+                                : "Receivable"}
                             </th>
                           </tr>
                         </thead>
@@ -1550,78 +1691,78 @@ export default function ReportsPage() {
                                 {formatDate(row.date)}
                               </td>
                               <td className="px-6 py-5">
-                                  <div className="flex flex-col gap-1.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-zinc-100 font-bold">
-                                        {row.description}
-                                      </span>
-                                      <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
-                                        {row.type}
-                                      </span>
-                                    </div>
-
-                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
-                                      <span className="text-blue-400 font-black uppercase">
-                                        {ledgerType === "SUPPLIER"
-                                          ? row.supplierName
-                                          : row.customerName}
-                                      </span>
-                                      {row.details && (
-                                        <>
-                                          {ledgerType === "SUPPLIER" ? (
-                                            <>
-                                              <span className="text-zinc-500 italic">
-                                                Purchase Detail:{" "}
-                                                {row.details.quantity}L @ Rs.{" "}
-                                                {row.details.rate}
-                                              </span>
-                                              <span
-                                                className={cn(
-                                                  "font-bold",
-                                                  row.details.status === "PAID"
-                                                    ? "text-emerald-500"
-                                                    : "text-rose-500",
-                                                )}
-                                              >
-                                                Status: {row.details.status}{" "}
-                                                (Paid: Rs.{" "}
-                                                {(
-                                                  row.details.paidAmount || 0
-                                                ).toLocaleString()}{" "}
-                                                | Rem: Rs.{" "}
-                                                {(
-                                                  row.details.remainingAmount || 0
-                                                ).toLocaleString()}
-                                                )
-                                              </span>
-                                            </>
-                                          ) : (
-                                            <>
-                                              <span className="text-zinc-400 font-bold">
-                                                Vehicle:{" "}
-                                                {row.details.vehicleNumber ||
-                                                  "N/A"}
-                                              </span>
-                                              <span className="text-zinc-500">
-                                                {row.details.product} (
-                                                {row.details.quantity}L)
-                                              </span>
-                                              <span className="text-zinc-600">
-                                                via{" "}
-                                                {row.details.nozzle || "Unknown"}
-                                              </span>
-                                              <span className="text-amber-500 font-bold">
-                                                {row.details.shift}
-                                              </span>
-                                              <span className="text-zinc-600 font-mono">
-                                                @ {row.details.time}
-                                              </span>
-                                            </>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-zinc-100 font-bold">
+                                      {row.description}
+                                    </span>
+                                    <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-[8px] font-black text-zinc-500 uppercase border border-zinc-800">
+                                      {row.type}
+                                    </span>
                                   </div>
+
+                                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px]">
+                                    <span className="text-blue-400 font-black uppercase">
+                                      {ledgerType === "SUPPLIER"
+                                        ? row.supplierName
+                                        : row.customerName}
+                                    </span>
+                                    {row.details && (
+                                      <>
+                                        {ledgerType === "SUPPLIER" ? (
+                                          <>
+                                            <span className="text-zinc-500 italic">
+                                              Purchase Detail:{" "}
+                                              {row.details.quantity}L @ Rs.{" "}
+                                              {row.details.rate}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "font-bold",
+                                                row.details.status === "PAID"
+                                                  ? "text-emerald-500"
+                                                  : "text-rose-500",
+                                              )}
+                                            >
+                                              Status: {row.details.status}{" "}
+                                              (Paid: Rs.{" "}
+                                              {(
+                                                row.details.paidAmount || 0
+                                              ).toLocaleString()}{" "}
+                                              | Rem: Rs.{" "}
+                                              {(
+                                                row.details.remainingAmount || 0
+                                              ).toLocaleString()}
+                                              )
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <span className="text-zinc-400 font-bold">
+                                              Vehicle:{" "}
+                                              {row.details.vehicleNumber ||
+                                                "N/A"}
+                                            </span>
+                                            <span className="text-zinc-500">
+                                              {row.details.product} (
+                                              {row.details.quantity}L)
+                                            </span>
+                                            <span className="text-zinc-600">
+                                              via{" "}
+                                              {row.details.nozzle || "Unknown"}
+                                            </span>
+                                            <span className="text-amber-500 font-bold">
+                                              {row.details.shift}
+                                            </span>
+                                            <span className="text-zinc-600 font-mono">
+                                              @ {row.details.time}
+                                            </span>
+                                          </>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
                               </td>
                               <td className="px-6 py-5 text-right font-mono text-rose-400/80">
                                 {row.debit > 0
@@ -1651,9 +1792,119 @@ export default function ReportsPage() {
               </div>
             )}
 
+            {/* Other Income Report */}
+            {reportType === "INCOME" && (
+              <div className="bg-zinc-900/40 rounded-3xl border border-zinc-800 overflow-hidden shadow-xl backdrop-blur-sm">
+                <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+                  <h3 className="font-bold text-zinc-100 flex items-center gap-2">
+                    <TrendingUp size={20} className="text-emerald-500" />
+                    Other Income Records
+                  </h3>
+                  <div className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                    Total: Rs.{" "}
+                    {data
+                      .reduce((sum: number, r: any) => sum + r.amount, 0)
+                      .toLocaleString()}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-950/50">
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                          Date
+                        </th>
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                          Description
+                        </th>
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                          Income Account
+                        </th>
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                          Received In
+                        </th>
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">
+                          Amount
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/50">
+                      {data.map((row: any) => (
+                        <tr
+                          key={row.id}
+                          className="hover:bg-zinc-800/30 transition-colors"
+                        >
+                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                            {formatDate(row.date)}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-zinc-100">
+                            {row.description}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                            {row.account}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                            {row.paidVia}
+                          </td>
+                          <td className="px-6 py-4 text-xs font-bold text-zinc-100 text-right">
+                            Rs. {row.amount.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             {/* Trial Balance */}
             {reportType === "TRIAL" && (
               <div className="space-y-6">
+                {/* Account Balances Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-6 rounded-3xl bg-zinc-900/40 border border-zinc-800">
+                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider mb-2">
+                      Cash in Hand
+                    </p>
+                    <p className="text-2xl font-black text-zinc-100">
+                      Rs.{" "}
+                      {(
+                        data.grouped?.ASSET?.find(
+                          (a: any) => a.code === "10001",
+                        )?.balance || 0
+                      ).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-6 rounded-3xl bg-zinc-900/40 border border-zinc-800">
+                    <p className="text-[10px] font-black uppercase text-zinc-500 tracking-wider mb-2">
+                      Bank Balance
+                    </p>
+                    <p className="text-2xl font-black text-zinc-100">
+                      Rs.{" "}
+                      {(
+                        data.grouped?.ASSET?.filter((a: any) =>
+                          a.code.startsWith("101"),
+                        ).reduce((sum: number, a: any) => sum + a.balance, 0) ||
+                        0
+                      ).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="p-6 rounded-3xl bg-emerald-500/10 border border-emerald-500/20">
+                    <p className="text-[10px] font-black uppercase text-emerald-600 tracking-wider mb-2">
+                      Total Receivables
+                    </p>
+                    <p className="text-2xl font-black text-emerald-500">
+                      Rs.{" "}
+                      {(
+                        data.grouped?.ASSET?.filter(
+                          (a: any) => a.code === "10201",
+                        ).reduce((sum: number, a: any) => sum + a.balance, 0) ||
+                        0
+                      ).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+
                 {/* Explanation Card */}
                 <div className="p-6 rounded-3xl bg-zinc-900/20 border border-zinc-800">
                   <p className="text-xs text-zinc-500 leading-relaxed">

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { CreditCustomersService } from './credit-customers.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -14,5 +14,14 @@ export class CreditCustomersController {
   @Get()
   findAll() {
     return this.service.findAll();
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() data: { vehicleNumber?: string; contact?: string; email?: string },
+  ) {
+    return this.service.update(id, data);
   }
 }

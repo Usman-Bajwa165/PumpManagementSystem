@@ -17,6 +17,7 @@ import { PaymentAccountsModule } from './payment-accounts/payment-accounts.modul
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { ExpensesModule } from './expenses/expenses.module';
 import { CreditCustomersModule } from './credit-customers/credit-customers.module';
+import { IncomeModule } from './income/income.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { CreditCustomersModule } from './credit-customers/credit-customers.modul
     ConfigModule.forRoot({ isGlobal: true }),
     SuppliersModule,
     ExpensesModule,
+    IncomeModule,
     CreditCustomersModule,
   ],
   controllers: [],

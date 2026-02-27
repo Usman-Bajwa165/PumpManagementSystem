@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountType } from '@prisma/client';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private whatsapp: WhatsappService,
+  ) {}
+
+  // ... (rest of the class)
 
   // Helper to format shift names
   private formatShiftName(shift: any): string {
@@ -92,16 +98,18 @@ export class ReportsService {
 
       // Calculate balances for each account
       const accountBalances = new Map<string, number>();
-      accounts.forEach(a => accountBalances.set(a.id, 0));
+      accounts.forEach((a) => accountBalances.set(a.id, 0));
 
-      transactions.forEach(tx => {
+      transactions.forEach((tx) => {
         const debitBal = accountBalances.get(tx.debitAccountId) || 0;
         const creditBal = accountBalances.get(tx.creditAccountId) || 0;
         accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
         accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
       });
 
-      const assetAccounts = accounts.filter((a) => a.type === AccountType.ASSET);
+      const assetAccounts = accounts.filter(
+        (a) => a.type === AccountType.ASSET,
+      );
       const liabilityAccounts = accounts.filter(
         (a) => a.type === AccountType.LIABILITY,
       );
@@ -265,6 +273,44 @@ export class ReportsService {
       default:
         return baseData;
     }
+  }
+
+  async getOtherIncomeReport(startDate?: Date, endDate?: Date) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
+    const where: any = {
+      creditAccount: {
+        type: AccountType.INCOME,
+        code: { not: '40101' }, // Exclude fuel sales
+      },
+    };
+
+    if (startDate || adjustedEnd) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (adjustedEnd) where.createdAt.lte = adjustedEnd;
+    }
+
+    const transactions = await this.prisma.transaction.findMany({
+      where,
+      include: {
+        creditAccount: true,
+        debitAccount: true,
+        createdBy: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return transactions.map((t) => ({
+      id: t.id,
+      date: t.createdAt,
+      description: t.description || 'Income',
+      amount: Number(t.amount),
+      account: t.creditAccount.name,
+      paidVia: t.debitAccount.name,
+      createdBy: t.createdBy?.username || 'Unknown',
+    }));
   }
 
   private aggregateDailySummary(records: any[]) {
@@ -693,14 +739,13 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
   ) {
-
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
 
     if (supplierId === 'ALL') {
       const suppliers = await this.prisma.supplier.findMany({
-        where: { isDeleted: false }
+        where: { isDeleted: false },
       });
       const allLedger: any[] = [];
       const summary: any[] = [];
@@ -907,7 +952,6 @@ export class ReportsService {
     startDate?: Date,
     endDate?: Date,
   ) {
-
     // Adjust endDate to end of day if provided
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
@@ -1155,9 +1199,9 @@ export class ReportsService {
 
       // Calculate balances for each account based on transactions
       const accountBalances = new Map<string, number>();
-      accounts.forEach(a => accountBalances.set(a.id, 0));
+      accounts.forEach((a) => accountBalances.set(a.id, 0));
 
-      transactions.forEach(tx => {
+      transactions.forEach((tx) => {
         const debitBal = accountBalances.get(tx.debitAccountId) || 0;
         const creditBal = accountBalances.get(tx.creditAccountId) || 0;
         accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
@@ -1260,9 +1304,9 @@ export class ReportsService {
 
       // Calculate balances for income and expense accounts
       const accountBalances = new Map<string, number>();
-      accounts.forEach(a => accountBalances.set(a.id, 0));
+      accounts.forEach((a) => accountBalances.set(a.id, 0));
 
-      transactions.forEach(tx => {
+      transactions.forEach((tx) => {
         const debitBal = accountBalances.get(tx.debitAccountId) || 0;
         const creditBal = accountBalances.get(tx.creditAccountId) || 0;
         accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
@@ -1529,20 +1573,35 @@ export class ReportsService {
     }
 
     doc.rect(0, 0, doc.page.width, 100).fill('#1e40af');
-    doc.fontSize(24).fillColor('#ffffff').font('Helvetica-Bold')
+    doc
+      .fontSize(24)
+      .fillColor('#ffffff')
+      .font('Helvetica-Bold')
       .text('PETROL PUMP MANAGEMENT', 40, 25, { align: 'center' });
-    doc.fontSize(14).fillColor('#93c5fd')
-      .text(type === 'supplier' ? 'SUPPLIER INVOICE' : 'CUSTOMER INVOICE', { align: 'center' });
-    doc.fontSize(9).fillColor('#e0e7ff')
+    doc
+      .fontSize(14)
+      .fillColor('#93c5fd')
+      .text(type === 'supplier' ? 'SUPPLIER INVOICE' : 'CUSTOMER INVOICE', {
+        align: 'center',
+      });
+    doc
+      .fontSize(9)
+      .fillColor('#e0e7ff')
       .text(`Generated: ${formattedDate}`, 40, 75, { align: 'right' });
 
     doc.moveDown(3);
 
-    doc.fontSize(12).fillColor('#000').font('Helvetica-Bold')
+    doc
+      .fontSize(12)
+      .fillColor('#000')
+      .font('Helvetica-Bold')
       .text(type === 'supplier' ? 'Supplier Details' : 'Customer Details', 40);
     doc.moveDown(0.5);
-    doc.fontSize(10).font('Helvetica')
-      .fillColor('#000').text(`Name: ${entity.name}`, 40);
+    doc
+      .fontSize(10)
+      .font('Helvetica')
+      .fillColor('#000')
+      .text(`Name: ${entity.name}`, 40);
     if (entity.contact) {
       doc.text(`Contact: ${entity.contact}`, 40);
     }
@@ -1554,12 +1613,19 @@ export class ReportsService {
     }
     doc.moveDown(1);
 
-    const totalBalance = ledger.length > 0 ? ledger[ledger.length - 1].runningBalance || 0 : 0;
-    doc.fontSize(14).font('Helvetica-Bold').fillColor('#1e40af')
+    const totalBalance =
+      ledger.length > 0 ? ledger[ledger.length - 1].runningBalance || 0 : 0;
+    doc
+      .fontSize(14)
+      .font('Helvetica-Bold')
+      .fillColor('#1e40af')
       .text(`Outstanding Balance: Rs. ${totalBalance.toLocaleString()}`, 40);
     doc.moveDown(1.5);
 
-    doc.fontSize(12).font('Helvetica-Bold').fillColor('#000')
+    doc
+      .fontSize(12)
+      .font('Helvetica-Bold')
+      .fillColor('#000')
       .text('Transaction History', 40);
     doc.moveDown(0.5);
 
@@ -1572,12 +1638,31 @@ export class ReportsService {
 
     doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e293b');
     doc.text('Date/Time', 40, y, { width: dateWidth, align: 'left' });
-    doc.text('Description', 40 + dateWidth, y, { width: descWidth, align: 'left' });
-    doc.text('Debit', 40 + dateWidth + descWidth, y, { width: debitWidth, align: 'right' });
-    doc.text('Credit', 40 + dateWidth + descWidth + debitWidth, y, { width: creditWidth, align: 'right' });
-    doc.text('Balance', 40 + dateWidth + descWidth + debitWidth + creditWidth, y, { width: balanceWidth, align: 'right' });
+    doc.text('Description', 40 + dateWidth, y, {
+      width: descWidth,
+      align: 'left',
+    });
+    doc.text('Debit', 40 + dateWidth + descWidth, y, {
+      width: debitWidth,
+      align: 'right',
+    });
+    doc.text('Credit', 40 + dateWidth + descWidth + debitWidth, y, {
+      width: creditWidth,
+      align: 'right',
+    });
+    doc.text(
+      'Balance',
+      40 + dateWidth + descWidth + debitWidth + creditWidth,
+      y,
+      { width: balanceWidth, align: 'right' },
+    );
     y += 15;
-    doc.moveTo(40, y).lineTo(doc.page.width - 40, y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+    doc
+      .moveTo(40, y)
+      .lineTo(doc.page.width - 40, y)
+      .strokeColor('#cbd5e1')
+      .lineWidth(1)
+      .stroke();
     y += 5;
 
     doc.fontSize(8).font('Helvetica').fillColor('#000');
@@ -1594,22 +1679,71 @@ export class ReportsService {
         minute: '2-digit',
         hour12: true,
       });
-      doc.text(dateTime, 40, y, { width: dateWidth, ellipsis: true, lineBreak: false });
-      doc.text(row.description || '-', 40 + dateWidth, y, { width: descWidth, ellipsis: true, lineBreak: false });
-      doc.text(row.debit > 0 ? row.debit.toLocaleString() : '-', 40 + dateWidth + descWidth, y, { width: debitWidth, align: 'right', ellipsis: true, lineBreak: false });
-      doc.text(row.credit > 0 ? row.credit.toLocaleString() : '-', 40 + dateWidth + descWidth + debitWidth, y, { width: creditWidth, align: 'right', ellipsis: true, lineBreak: false });
-      doc.text((row.runningBalance || 0).toLocaleString(), 40 + dateWidth + descWidth + debitWidth + creditWidth, y, { width: balanceWidth, align: 'right', ellipsis: true, lineBreak: false });
+      doc.text(dateTime, 40, y, {
+        width: dateWidth,
+        ellipsis: true,
+        lineBreak: false,
+      });
+      doc.text(row.description || '-', 40 + dateWidth, y, {
+        width: descWidth,
+        ellipsis: true,
+        lineBreak: false,
+      });
+      doc.text(
+        row.debit > 0 ? row.debit.toLocaleString() : '-',
+        40 + dateWidth + descWidth,
+        y,
+        { width: debitWidth, align: 'right', ellipsis: true, lineBreak: false },
+      );
+      doc.text(
+        row.credit > 0 ? row.credit.toLocaleString() : '-',
+        40 + dateWidth + descWidth + debitWidth,
+        y,
+        {
+          width: creditWidth,
+          align: 'right',
+          ellipsis: true,
+          lineBreak: false,
+        },
+      );
+      doc.text(
+        (row.runningBalance || 0).toLocaleString(),
+        40 + dateWidth + descWidth + debitWidth + creditWidth,
+        y,
+        {
+          width: balanceWidth,
+          align: 'right',
+          ellipsis: true,
+          lineBreak: false,
+        },
+      );
       y += 12;
       if (rowIdx % 5 === 4) {
-        doc.moveTo(40, y).lineTo(doc.page.width - 40, y).strokeColor('#f1f5f9').lineWidth(0.5).stroke();
+        doc
+          .moveTo(40, y)
+          .lineTo(doc.page.width - 40, y)
+          .strokeColor('#f1f5f9')
+          .lineWidth(0.5)
+          .stroke();
         y += 3;
       }
     });
 
     const bottom = doc.page.height - 50;
-    doc.fontSize(8).fillColor('#94a3b8')
-      .text('PETROL PUMP MANAGEMENT SYSTEM | PROFESSIONAL INVOICE', 40, bottom, { align: 'center' });
-    doc.fontSize(7).text('\u00a9 2026 PPMS | Electronically Generated Document', { align: 'center' });
+    doc
+      .fontSize(8)
+      .fillColor('#94a3b8')
+      .text(
+        'PETROL PUMP MANAGEMENT SYSTEM | PROFESSIONAL INVOICE',
+        40,
+        bottom,
+        { align: 'center' },
+      );
+    doc
+      .fontSize(7)
+      .text('\u00a9 2026 PPMS | Electronically Generated Document', {
+        align: 'center',
+      });
 
     doc.end();
 
@@ -1617,5 +1751,34 @@ export class ReportsService {
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
     });
+  }
+
+  async sendCreditReminder(customerId: string) {
+    const customer = await this.prisma.creditCustomer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer || !customer.contact)
+      throw new Error('Customer contact not found');
+
+    const message = `🔔 *Credit Payment Reminder* 🔔\nDear ${customer.name},\nThis is a friendly reminder to clear your outstanding credit balance of *Rs. ${Number(customer.totalCredit).toLocaleString()}*.\nThank you for your business!`;
+
+    return this.whatsapp.sendMessage(customer.contact, message);
+  }
+
+  async sendCreditInvoice(customerId: string) {
+    const customer = await this.prisma.creditCustomer.findUnique({
+      where: { id: customerId },
+    });
+    if (!customer || !customer.contact)
+      throw new Error('Customer contact not found');
+
+    const pdfBuffer = await this.generateInvoice('customer', customerId);
+
+    return this.whatsapp.sendMediaBuffer(
+      customer.contact,
+      pdfBuffer,
+      `invoice-${customer.name}.pdf`,
+      `Attached is your latest credit invoice. Outstanding: Rs. ${Number(customer.totalCredit).toLocaleString()}`,
+    );
   }
 }

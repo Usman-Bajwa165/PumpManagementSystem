@@ -138,31 +138,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8 p-6 max-w-[1600px] mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
-              Welcome back, {user?.username}
-            </h1>
-            <p className="text-zinc-500 mt-1 flex items-center gap-2">
-              <Activity size={16} />
-              Station Activity Overview
-            </p>
-          </div>
-          <div className="text-right hidden md:block">
-            <p className="text-2xl font-bold text-zinc-200">
-              {new Date().toLocaleDateString("en-US", { weekday: "long" })}
-            </p>
-            <p className="text-sm text-zinc-500">
-              {new Date().toLocaleDateString("en-US", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
-          </div>
-        </div>
+    <DashboardLayout title="Dashboard">
+      <div className="h-full overflow-y-auto">
+        <div className="p-6 max-w-[1600px] mx-auto space-y-8">
 
         {/* Stats Grid */}
         <div
@@ -339,6 +317,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </DashboardLayout>

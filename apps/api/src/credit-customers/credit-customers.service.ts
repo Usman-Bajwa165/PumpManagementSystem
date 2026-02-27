@@ -10,4 +10,14 @@ export class CreditCustomersService {
       orderBy: { name: 'asc' },
     });
   }
+
+  async update(
+    id: string,
+    data: { vehicleNumber?: string; contact?: string; email?: string },
+  ) {
+    return this.prisma.creditCustomer.update({
+      where: { id },
+      data,
+    });
+  }
 }

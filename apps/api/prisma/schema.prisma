@@ -258,7 +258,19 @@ model ExpenseRecord {
   createdBy   String?
 }
 
-// ... existing models ...
+model IncomeRecord {
+  id          String   @id @default(uuid())
+  title       String
+  amount      Decimal  @db.Decimal(15, 2)
+  category    String   // e.g. "Rent", "Service"
+  description String?
+  date        DateTime @default(now())
+  
+  transactionId String? @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id])
+
+  createdBy   String?
+}
 
 model Transaction {
   id              String   @id @default(uuid())
@@ -278,6 +290,7 @@ model Transaction {
   customer        CreditCustomer? @relation(fields: [customerId], references: [id])
 
   expenseRecord   ExpenseRecord?
+  incomeRecord    IncomeRecord?
 
   createdById     String?
   createdBy       User?    @relation("TransactionCreator", fields: [createdById], references: [id])
