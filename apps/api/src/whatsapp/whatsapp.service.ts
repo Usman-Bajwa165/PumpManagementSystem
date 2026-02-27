@@ -135,9 +135,25 @@ export class WhatsappService implements OnModuleInit {
     });
   }
 
+  private sanitizeNumber(to: string): string {
+    // Remove all non-numeric characters
+    let cleaned = to.replace(/\D/g, '');
+
+    // If it's a local Pakistani number (starting with 03 or 3)
+    if (cleaned.startsWith('0')) {
+      cleaned = '92' + cleaned.substring(1);
+    } else if (cleaned.length === 10 && cleaned.startsWith('3')) {
+      cleaned = '92' + cleaned;
+    }
+
+    // Ensure it ends with @c.us if not already present
+    return cleaned.includes('@c.us') ? cleaned : `${cleaned}@c.us`;
+  }
+
   async queueMessage(to: string, message: string) {
+    const sanitizedTo = this.sanitizeNumber(to);
     return this.prisma.notificationQueue.create({
-      data: { to, message },
+      data: { to: sanitizedTo, message },
     });
   }
 
@@ -149,9 +165,9 @@ export class WhatsappService implements OnModuleInit {
     }
 
     try {
-      const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
+      const chatId = this.sanitizeNumber(to);
       await this.client.sendMessage(chatId, message);
-      this.logger.log(`Message sent to ${to}`);
+      this.logger.log(`Message sent to ${chatId}`);
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send message to ${to}: ${err.message}`);
@@ -178,9 +194,9 @@ export class WhatsappService implements OnModuleInit {
 
     try {
       const media = MessageMedia.fromFilePath(filePath);
-      const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
+      const chatId = this.sanitizeNumber(to);
       await this.client.sendMessage(chatId, media, { caption });
-      this.logger.log(`File sent to ${to}: ${filePath}`);
+      this.logger.log(`File sent to ${chatId}: ${filePath}`);
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send file to ${to}: ${err.message}`);
@@ -215,9 +231,9 @@ export class WhatsappService implements OnModuleInit {
         buffer.toString('base64'),
         filename,
       );
-      const chatId = to.includes('@c.us') ? to : `${to}@c.us`;
+      const chatId = this.sanitizeNumber(to);
       await this.client.sendMessage(chatId, media, { caption });
-      this.logger.log(`Media buffer sent to ${to}: ${filename}`);
+      this.logger.log(`Media buffer sent to ${chatId}: ${filename}`);
       return true;
     } catch (err: any) {
       this.logger.error(`Failed to send media buffer to ${to}: ${err.message}`);

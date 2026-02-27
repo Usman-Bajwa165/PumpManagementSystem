@@ -275,16 +275,31 @@ export class ReportsService {
     }
   }
 
-  async getOtherIncomeReport(startDate?: Date, endDate?: Date) {
+  async getOtherIncomeReport(
+    startDate?: Date,
+    endDate?: Date,
+    accountId?: string,
+    paymentAccountId?: string,
+  ) {
     const adjustedEnd = endDate ? new Date(endDate) : undefined;
     if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
 
     const where: any = {
       creditAccount: {
         type: AccountType.INCOME,
-        code: { not: '40101' }, // Exclude fuel sales
       },
     };
+
+    if (accountId) {
+      where.creditAccountId = accountId;
+    }
+
+    if (paymentAccountId) {
+      where.OR = [
+        { debitAccountId: paymentAccountId },
+        { paymentAccountId: paymentAccountId },
+      ];
+    }
 
     if (startDate || adjustedEnd) {
       where.createdAt = {};
@@ -297,20 +312,117 @@ export class ReportsService {
       include: {
         creditAccount: true,
         debitAccount: true,
+        paymentAccount: true,
         createdBy: { select: { username: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    return transactions.map((t) => ({
-      id: t.id,
-      date: t.createdAt,
-      description: t.description || 'Income',
-      amount: Number(t.amount),
-      account: t.creditAccount.name,
-      paidVia: t.debitAccount.name,
-      createdBy: t.createdBy?.username || 'Unknown',
-    }));
+    return transactions.map((t) => {
+      let paymentInfo = t.debitAccount.name;
+      if (t.paymentAccount) {
+        paymentInfo = `${t.debitAccount.name} (${t.paymentAccount.name})`;
+      }
+
+      let description = t.description || 'Income';
+      // If description contains our payment account ID, replace it with the name for professional look
+      if (
+        t.paymentAccountId &&
+        t.paymentAccount &&
+        description.includes(t.paymentAccountId)
+      ) {
+        description = description.replace(
+          t.paymentAccountId,
+          t.paymentAccount.name,
+        );
+      }
+
+      return {
+        id: t.id,
+        date: t.createdAt,
+        description,
+        amount: Number(t.amount),
+        account: t.creditAccount.name,
+        paymentInfo,
+        paidVia: t.debitAccount.name,
+        createdBy: t.createdBy?.username || 'Unknown',
+      };
+    });
+  }
+
+  async getOtherExpenseReport(
+    startDate?: Date,
+    endDate?: Date,
+    accountId?: string,
+    paymentAccountId?: string,
+  ) {
+    const adjustedEnd = endDate ? new Date(endDate) : undefined;
+    if (adjustedEnd) adjustedEnd.setHours(23, 59, 59, 999);
+
+    const where: any = {
+      debitAccount: {
+        type: AccountType.EXPENSE,
+      },
+    };
+
+    if (accountId) {
+      where.debitAccountId = accountId;
+    }
+
+    if (paymentAccountId) {
+      where.OR = [
+        { creditAccountId: paymentAccountId },
+        { paymentAccountId: paymentAccountId },
+      ];
+    }
+
+    if (startDate || adjustedEnd) {
+      where.createdAt = {};
+      if (startDate) where.createdAt.gte = startDate;
+      if (adjustedEnd) where.createdAt.lte = adjustedEnd;
+    }
+
+    const transactions = await this.prisma.transaction.findMany({
+      where,
+      include: {
+        creditAccount: true,
+        debitAccount: true,
+        paymentAccount: true,
+        createdBy: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return transactions.map((t) => {
+      let paymentInfo = t.creditAccount.name;
+      if (t.paymentAccount) {
+        paymentInfo = `${t.creditAccount.name} (${t.paymentAccount.name})`;
+      }
+
+      let description = t.description || 'Expense';
+      // If description contains our payment account ID, replace it with the name for professional look
+      if (
+        t.paymentAccountId &&
+        t.paymentAccount &&
+        description.includes(t.paymentAccountId)
+      ) {
+        description = description.replace(
+          t.paymentAccountId,
+          t.paymentAccount.name,
+        );
+      }
+
+      return {
+        id: t.id,
+        date: t.createdAt,
+        description,
+        amount: Number(t.amount),
+        account: t.debitAccount.name,
+        paymentInfo,
+        paidVia: t.creditAccount.name,
+        createdBy: t.createdBy?.username || 'Unknown',
+      };
+    });
   }
 
   private aggregateDailySummary(records: any[]) {

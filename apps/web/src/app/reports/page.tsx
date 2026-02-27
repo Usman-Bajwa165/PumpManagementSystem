@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import {
   Activity,
   Loader2,
@@ -18,6 +19,7 @@ import {
   Calendar,
   Download,
   MessageCircle,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
@@ -128,6 +130,49 @@ export default function ReportsPage() {
   const [showLogs, setShowLogs] = useState(
     searchParams.get("showLogs") === "true",
   );
+  const [financeMode, setFinanceMode] = useState<"INCOME" | "EXPENSE">(
+    (searchParams.get("financeMode") as any) || "INCOME",
+  );
+  const [financeAccountId, setFinanceAccountId] = useState(
+    searchParams.get("financeAccountId") || "",
+  );
+  const [financePaymentAccountId, setFinancePaymentAccountId] = useState(
+    searchParams.get("financePaymentAccountId") || "",
+  );
+
+  // Daily Activity Tracking (Reminders/Invoices)
+  const [sentActivity, setSentActivity] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0];
+    const stored = localStorage.getItem(`pump_sent_activity_${today}`);
+    if (stored) {
+      setSentActivity(JSON.parse(stored));
+    }
+  }, []);
+
+  const markAsSent = (
+    entityId: string,
+    type: "REMINDER" | "INVOICE_FILE" | "INVOICE_WA",
+  ) => {
+    const today = new Date().toISOString().split("T")[0];
+    const key = `${entityId}_${type}`;
+    const newActivity = { ...sentActivity, [key]: true };
+    setSentActivity(newActivity);
+    localStorage.setItem(
+      `pump_sent_activity_${today}`,
+      JSON.stringify(newActivity),
+    );
+  };
+
+  const isSentToday = (
+    entityId: string,
+    type: "REMINDER" | "INVOICE_FILE" | "INVOICE_WA",
+  ) => {
+    return !!sentActivity[`${entityId}_${type}`];
+  };
+
+  const { success, error: showErrorToast } = useToast();
 
   interface Shift {
     id: string;
@@ -159,6 +204,8 @@ export default function ReportsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
 
   // URL Synchronization
   useEffect(() => {
@@ -181,6 +228,11 @@ export default function ReportsPage() {
       params.set("ledgerType", ledgerType);
       if (selectedEntityId) params.set("entityId", selectedEntityId);
       params.set("showLogs", showLogs.toString());
+    } else if (reportType === "INCOME") {
+      params.set("financeMode", financeMode);
+      if (financeAccountId) params.set("financeAccountId", financeAccountId);
+      if (financePaymentAccountId)
+        params.set("financePaymentAccountId", financePaymentAccountId);
     }
 
     const newUrl = `${window.location.pathname}?${params.toString()}`;
@@ -199,6 +251,9 @@ export default function ReportsPage() {
     ledgerType,
     selectedEntityId,
     showLogs,
+    financeMode,
+    financeAccountId,
+    financePaymentAccountId,
     router,
   ]);
 
@@ -238,7 +293,13 @@ export default function ReportsPage() {
           endpoint = "/reports/trial-balance";
           break;
         case "INCOME":
-          endpoint = "/reports/other-income";
+          endpoint =
+            financeMode === "INCOME"
+              ? "/reports/other-income"
+              : "/reports/other-expense";
+          if (financeAccountId) params.accountId = financeAccountId;
+          if (financePaymentAccountId)
+            params.paymentAccountId = financePaymentAccountId;
           break;
         case "LEDGER":
           if (!selectedEntityId) {
@@ -280,24 +341,38 @@ export default function ReportsPage() {
     purchaseProductId,
     ledgerType,
     selectedEntityId,
+    financeMode,
+    financeAccountId,
+    financePaymentAccountId,
   ]);
 
   const fetchMetadata = useCallback(async () => {
     try {
-      const [shiftsRes, nozzlesRes, productsRes, suppliersRes, customersRes] =
-        await Promise.all([
-          api.get("/shifts"),
-          api.get("/inventory/nozzles"),
-          api.get("/inventory/products"),
-          api.get("/suppliers"),
-          api.get("/credit-customers"),
-        ]);
+      const [
+        shiftsRes,
+        nozzlesRes,
+        productsRes,
+        suppliersRes,
+        customersRes,
+        accountsRes,
+        paymentAccountsRes,
+      ] = await Promise.all([
+        api.get("/shifts"),
+        api.get("/inventory/nozzles"),
+        api.get("/inventory/products"),
+        api.get("/suppliers"),
+        api.get("/credit-customers"),
+        api.get("/accounting/accounts"),
+        api.get("/accounting/payment-accounts"),
+      ]);
       setShifts(shiftsRes.data);
       setNozzles(nozzlesRes.data);
       setProducts(productsRes.data);
       setSuppliers(suppliersRes.data);
       // Only show customers with credit history
       setCustomers(customersRes.data.filter((c: any) => c.id));
+      setAccounts(accountsRes.data);
+      setPaymentAccounts(paymentAccountsRes.data);
     } catch (err) {
       console.error("Failed to fetch metadata:", err);
     }
@@ -322,6 +397,9 @@ export default function ReportsPage() {
     purchaseProductId,
     ledgerType,
     selectedEntityId,
+    financeMode,
+    financeAccountId,
+    financePaymentAccountId,
     fetchReport,
   ]);
 
@@ -330,7 +408,7 @@ export default function ReportsPage() {
     { id: "BS", label: "Balance Sheet", icon: Scale },
     { id: "SALES", label: "Sales Report", icon: ShoppingCart },
     { id: "PURCHASE", label: "Purchase Report", icon: Truck },
-    { id: "INCOME", label: "Other Income", icon: TrendingUp },
+    { id: "INCOME", label: "Other Finance", icon: TrendingUp },
     { id: "LEDGER", label: "Ledgers", icon: BookOpen },
     { id: "TRIAL", label: "Trial Balance", icon: FileText },
   ];
@@ -338,7 +416,13 @@ export default function ReportsPage() {
   const handleDownloadPDF = () => {
     if (!data) return;
     const doc = new jsPDF();
-    const title = tabs.find((t) => t.id === reportType)?.label || "Report";
+    let title = tabs.find((t) => t.id === reportType)?.label || "Report";
+    if (reportType === "INCOME") {
+      title =
+        financeMode === "INCOME"
+          ? "Other Income Report"
+          : "Other Expense Report";
+    }
     const date = new Date().toISOString().split("T")[0];
     const filename = `${title.replace(/\s+/g, "_")}_${date}.pdf`;
 
@@ -484,7 +568,14 @@ export default function ReportsPage() {
         `Rs. ${(data.totalCredit || 0).toLocaleString()}`,
       ]);
     } else if (reportType === "INCOME") {
-      columns = ["Date", "Description", "Account", "Paid Via", "Amount"];
+      const isIncome = financeMode === "INCOME";
+      columns = [
+        "Date",
+        "Description",
+        isIncome ? "Income Account" : "Expense Account",
+        isIncome ? "Received In" : "Paid Via",
+        "Amount",
+      ];
       tableData = data.map((r: any) => [
         formatDate(r.date),
         r.description,
@@ -768,6 +859,67 @@ export default function ReportsPage() {
                       </option>
                     ),
                   )}
+                </select>
+              </div>
+            )}
+
+            {/* Other Finance Filters */}
+            {reportType === "INCOME" && (
+              <div className="flex flex-wrap items-center gap-3">
+                <select
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all font-bold"
+                  value={financeMode}
+                  onChange={(e) => {
+                    setFinanceMode(e.target.value as "INCOME" | "EXPENSE");
+                    setFinanceAccountId("");
+                  }}
+                >
+                  <option value="INCOME">Income Records</option>
+                  <option value="EXPENSE">Expense Records</option>
+                </select>
+
+                <select
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all min-w-[180px]"
+                  value={financeAccountId}
+                  onChange={(e) => setFinanceAccountId(e.target.value)}
+                >
+                  <option value="">
+                    All {financeMode === "INCOME" ? "Income" : "Expense"}{" "}
+                    Accounts
+                  </option>
+                  {accounts
+                    .filter((acc) => acc.type === financeMode)
+                    .map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name}
+                      </option>
+                    ))}
+                </select>
+
+                <select
+                  className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-300 outline-none focus:border-zinc-500 transition-all min-w-[150px]"
+                  value={financePaymentAccountId}
+                  onChange={(e) => setFinancePaymentAccountId(e.target.value)}
+                >
+                  <option value="">All Payments</option>
+                  {/* Show main Asset accounts used for payments */}
+                  {accounts
+                    .filter(
+                      (acc) =>
+                        acc.type === "ASSET" &&
+                        (acc.code === "10101" || acc.code === "10201"),
+                    )
+                    .map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name}
+                      </option>
+                    ))}
+                  {/* Show specific Payment Accounts */}
+                  {paymentAccounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             )}
@@ -1545,97 +1697,128 @@ export default function ReportsPage() {
                                   >
                                     Logs
                                   </button>
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        const response = await api.get(
-                                          `/reports/invoice/${ledgerType.toLowerCase()}/${item.id}`,
-                                          { responseType: "blob" },
-                                        );
-                                        const url = window.URL.createObjectURL(
-                                          new Blob([response.data]),
-                                        );
-                                        const link =
-                                          document.createElement("a");
-                                        link.href = url;
-                                        const date = new Date()
-                                          .toISOString()
-                                          .split("T")[0];
-                                        link.setAttribute(
-                                          "download",
-                                          `INV_${item.name.replace(/\s+/g, "_")}_${date}.pdf`,
-                                        );
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        link.remove();
-                                      } catch (error) {
-                                        console.error(
-                                          "Failed to download invoice:",
-                                          error,
-                                        );
-                                        alert(
-                                          "Failed to generate invoice. Please try again.",
-                                        );
-                                      }
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-[10px] font-black text-white hover:bg-blue-500 transition-all uppercase"
-                                  >
-                                    Invoice
-                                  </button>
+                                  {isSentToday(item.id, "INVOICE_FILE") ? (
+                                    <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-[10px] font-black text-zinc-500 uppercase flex items-center gap-1">
+                                      <Check size={12} /> Invoice Generated
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={async () => {
+                                        try {
+                                          const response = await api.get(
+                                            `/reports/invoice/${ledgerType.toLowerCase()}/${item.id}`,
+                                            { responseType: "blob" },
+                                          );
+                                          const url =
+                                            window.URL.createObjectURL(
+                                              new Blob([response.data]),
+                                            );
+                                          const link =
+                                            document.createElement("a");
+                                          link.href = url;
+                                          const date = new Date()
+                                            .toISOString()
+                                            .split("T")[0];
+                                          link.setAttribute(
+                                            "download",
+                                            `INV_${item.name.replace(/\s+/g, "_")}_${date}.pdf`,
+                                          );
+                                          document.body.appendChild(link);
+                                          link.click();
+                                          link.remove();
+                                          markAsSent(item.id, "INVOICE_FILE");
+                                          success(
+                                            "Invoice Generated",
+                                            `Invoice for ${item.name} has been downloaded.`,
+                                          );
+                                        } catch (error) {
+                                          console.error(
+                                            "Failed to download invoice:",
+                                            error,
+                                          );
+                                          showErrorToast(
+                                            "Error",
+                                            `Failed to generate invoice for ${item.name}. Please try again.`,
+                                          );
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg bg-blue-600 border border-blue-500 text-[10px] font-black text-white hover:bg-blue-500 transition-all uppercase"
+                                    >
+                                      Invoice
+                                    </button>
+                                  )}
                                   {ledgerType === "CUSTOMER" && (
                                     <>
-                                      <button
-                                        onClick={async () => {
-                                          if (
-                                            !confirm(
-                                              "Send WhatsApp reminder to this customer?",
+                                      {isSentToday(item.id, "REMINDER") ? (
+                                        <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-[10px] font-black text-zinc-500 uppercase flex items-center gap-1">
+                                          <Check size={12} /> Reminder Sent
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={async () => {
+                                            if (
+                                              !confirm(
+                                                `Send WhatsApp reminder to ${item.name} (${item.contact})?`,
+                                              )
                                             )
-                                          )
-                                            return;
-                                          try {
-                                            await api.get(
-                                              `/reports/send-reminder/${item.id}`,
-                                            );
-                                            alert(
-                                              "Reminder sent successfully!",
-                                            );
-                                          } catch (error) {
-                                            alert(
-                                              "Failed to send reminder via WhatsApp.",
-                                            );
-                                          }
-                                        }}
-                                        className="px-3 py-1.5 rounded-lg bg-emerald-600 border border-emerald-500 text-[10px] font-black text-white hover:bg-emerald-500 transition-all uppercase flex items-center gap-1"
-                                      >
-                                        <MessageCircle size={12} />
-                                        WhatsApp
-                                      </button>
-                                      <button
-                                        onClick={async () => {
-                                          if (
-                                            !confirm(
-                                              "Send PDF invoice via WhatsApp to this customer?",
+                                              return;
+                                            try {
+                                              await api.get(
+                                                `/reports/send-reminder/${item.id}`,
+                                              );
+                                              markAsSent(item.id, "REMINDER");
+                                              success(
+                                                "Reminder Sent",
+                                                `Reminder sent successfully to ${item.name} at ${item.contact}.`,
+                                              );
+                                            } catch (error) {
+                                              showErrorToast(
+                                                "Error",
+                                                `Failed to send reminder to ${item.name} at ${item.contact}.`,
+                                              );
+                                            }
+                                          }}
+                                          className="px-3 py-1.5 rounded-lg bg-emerald-600 border border-emerald-500 text-[10px] font-black text-white hover:bg-emerald-500 transition-all uppercase flex items-center gap-1"
+                                        >
+                                          <MessageCircle size={12} />
+                                          WhatsApp
+                                        </button>
+                                      )}
+                                      {isSentToday(item.id, "INVOICE_WA") ? (
+                                        <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-[10px] font-black text-zinc-500 uppercase flex items-center gap-1">
+                                          <Check size={12} /> Invoice Sent
+                                        </span>
+                                      ) : (
+                                        <button
+                                          onClick={async () => {
+                                            if (
+                                              !confirm(
+                                                `Send PDF invoice via WhatsApp to ${item.name} (${item.contact})?`,
+                                              )
                                             )
-                                          )
-                                            return;
-                                          try {
-                                            await api.get(
-                                              `/reports/send-invoice/${item.id}`,
-                                            );
-                                            alert(
-                                              "Invoice sent successfully via WhatsApp!",
-                                            );
-                                          } catch (error) {
-                                            alert(
-                                              "Failed to send invoice via WhatsApp.",
-                                            );
-                                          }
-                                        }}
-                                        className="px-3 py-1.5 rounded-lg bg-emerald-950 border border-emerald-800 text-[10px] font-black text-emerald-400 hover:bg-emerald-900 transition-all uppercase flex items-center gap-1"
-                                      >
-                                        <FileText size={12} />
-                                        WhatsApp
-                                      </button>
+                                              return;
+                                            try {
+                                              await api.get(
+                                                `/reports/send-invoice/${item.id}`,
+                                              );
+                                              markAsSent(item.id, "INVOICE_WA");
+                                              success(
+                                                "Invoice Sent",
+                                                `Invoice sent successfully to ${item.name} at ${item.contact}.`,
+                                              );
+                                            } catch (error) {
+                                              showErrorToast(
+                                                "Error",
+                                                `Failed to send invoice to ${item.name} at ${item.contact}.`,
+                                              );
+                                            }
+                                          }}
+                                          className="px-3 py-1.5 rounded-lg bg-emerald-950 border border-emerald-800 text-[10px] font-black text-emerald-400 hover:bg-emerald-900 transition-all uppercase flex items-center gap-1"
+                                        >
+                                          <FileText size={12} />
+                                          WhatsApp
+                                        </button>
+                                      )}
                                     </>
                                   )}
                                 </div>
@@ -1792,65 +1975,82 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {/* Other Income Report */}
+            {/* Other Finance Report */}
             {reportType === "INCOME" && (
               <div className="bg-zinc-900/40 rounded-3xl border border-zinc-800 overflow-hidden shadow-xl backdrop-blur-sm">
                 <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
                   <h3 className="font-bold text-zinc-100 flex items-center gap-2">
-                    <TrendingUp size={20} className="text-emerald-500" />
-                    Other Income Records
+                    {financeMode === "INCOME" ? (
+                      <TrendingUp size={20} className="text-emerald-500" />
+                    ) : (
+                      <TrendingDown size={20} className="text-rose-500" />
+                    )}
+                    Other {financeMode === "INCOME" ? "Income" : "Expense"}{" "}
+                    Records
                   </h3>
-                  <div className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                  <div
+                    className={cn(
+                      "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                      financeMode === "INCOME"
+                        ? "bg-emerald-500/10 text-emerald-500"
+                        : "bg-rose-500/10 text-rose-500",
+                    )}
+                  >
                     Total: Rs.{" "}
-                    {data
-                      .reduce((sum: number, r: any) => sum + r.amount, 0)
-                      .toLocaleString()}
+                    {Array.isArray(data)
+                      ? data
+                          .reduce((sum: number, r: any) => sum + r.amount, 0)
+                          .toLocaleString()
+                      : "0"}
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-zinc-950/50">
-                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                <div className="max-h-[500px] overflow-y-auto custom-scrollbar">
+                  <table className="w-full text-left border-separate border-spacing-0">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-zinc-950 shadow-md">
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md first:rounded-tl-2xl">
                           Date
                         </th>
-                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
                           Description
                         </th>
-                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                          Income Account
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
+                          {financeMode === "INCOME"
+                            ? "Income Account"
+                            : "Expense Account"}
                         </th>
-                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                          Received In
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md">
+                          Account Details
                         </th>
-                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">
+                        <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md last:rounded-tr-2xl">
                           Amount
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-800/50">
-                      {data.map((row: any) => (
-                        <tr
-                          key={row.id}
-                          className="hover:bg-zinc-800/30 transition-colors"
-                        >
-                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
-                            {formatDate(row.date)}
-                          </td>
-                          <td className="px-6 py-4 text-xs font-bold text-zinc-100">
-                            {row.description}
-                          </td>
-                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
-                            {row.account}
-                          </td>
-                          <td className="px-6 py-4 text-xs font-bold text-zinc-400">
-                            {row.paidVia}
-                          </td>
-                          <td className="px-6 py-4 text-xs font-bold text-zinc-100 text-right">
-                            Rs. {row.amount.toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
+                      {Array.isArray(data) &&
+                        data.map((row: any) => (
+                          <tr
+                            key={row.id}
+                            className="hover:bg-zinc-800/30 transition-colors"
+                          >
+                            <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                              {formatDate(row.date)}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-zinc-100">
+                              {row.description}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                              {row.account}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-zinc-400">
+                              {row.paymentInfo || row.paidVia}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-zinc-100 text-right">
+                              Rs. {row.amount.toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>

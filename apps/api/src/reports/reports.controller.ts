@@ -146,10 +146,30 @@ export class ReportsController {
   getOtherIncomeReport(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('accountId') accountId?: string,
+    @Query('paymentAccountId') paymentAccountId?: string,
   ) {
     return this.reportsService.getOtherIncomeReport(
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
+      accountId,
+      paymentAccountId,
+    );
+  }
+
+  @Roles(Role.MANAGER, Role.ADMIN)
+  @Get('other-expense')
+  getOtherExpenseReport(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('accountId') accountId?: string,
+    @Query('paymentAccountId') paymentAccountId?: string,
+  ) {
+    return this.reportsService.getOtherExpenseReport(
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+      accountId,
+      paymentAccountId,
     );
   }
 
