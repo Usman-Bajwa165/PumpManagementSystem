@@ -82,7 +82,7 @@ export class BackupService {
 
   @Cron('0 0 1 * *') // First day of every month at midnight
   async performMonthlyFullBackup() {
-    await this.performFullBackup(true); // true = automatic
+    await this.performFullBackup(true); // true = automatic (includes SQL backup)
   }
 
   async performBackup(period: 'D' | 'N') {
@@ -118,6 +118,9 @@ export class BackupService {
         type: 'Automatic',
         user: 'System',
       });
+
+      // Update monthly SQL backup if exists
+      await this.updateMonthlySQLBackup();
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
@@ -167,6 +170,9 @@ export class BackupService {
         type: 'Manual',
         user: 'Admin/Manager',
       });
+
+      // Update monthly SQL backup if exists
+      await this.updateMonthlySQLBackup();
 
       return { success: true, filename };
     } catch (error) {
@@ -243,6 +249,9 @@ export class BackupService {
         type: isAutomatic ? 'Automatic Monthly Full' : 'Manual Full Database',
         user: isAutomatic ? 'System' : 'Admin/Manager',
       });
+
+      // Create/Update monthly SQL backup
+      await this.createOrUpdateMonthlySQLBackup();
 
       return { success: true, filename };
     } catch (error) {
@@ -584,5 +593,100 @@ export class BackupService {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send backup notification: ${errorMsg}`);
     }
+  }
+
+  private async createOrUpdateMonthlySQLBackup() {
+    try {
+      const now = new Date();
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthName = monthNames[now.getMonth()];
+      const year = now.getFullYear();
+      const filename = `DB_${monthName}-${year}.sql`;
+      const sqlFile = path.join(this.backupDir, filename);
+
+      const isNewFile = !fs.existsSync(sqlFile);
+      
+      await this.generateSQLBackup(sqlFile);
+
+      const stats = fs.statSync(sqlFile);
+      const sizeKB = (stats.size / 1024).toFixed(2);
+
+      this.logger.logBusinessOperation(
+        isNewFile ? 'BACKUP_SQL_CREATED' : 'BACKUP_SQL_UPDATED',
+        `${filename} ${isNewFile ? 'created' : 'updated'} (${sizeKB} KB)`,
+        undefined,
+        true
+      );
+
+      // Send SQL backup to WhatsApp
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      if (prefs && prefs.phoneNumber) {
+        const caption = `🗄️ *Monthly SQL Database Backup* 🗄️\nFile: ${filename}\nSize: ${sizeKB} KB\nMonth: ${monthName} ${year}\nTime: ${new Date().toLocaleString('en-PK', { timeZone: 'Asia/Karachi' })}`;
+        await this.whatsapp.sendFile(prefs.phoneNumber, sqlFile, caption);
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Monthly SQL backup failed: ${errorMsg}`, 'BackupService');
+    }
+  }
+
+  private async updateMonthlySQLBackup() {
+    try {
+      const now = new Date();
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthName = monthNames[now.getMonth()];
+      const year = now.getFullYear();
+      const filename = `DB_${monthName}-${year}.sql`;
+      const sqlFile = path.join(this.backupDir, filename);
+
+      if (fs.existsSync(sqlFile)) {
+        this.logger.log(`Updating monthly SQL backup: ${filename}`, 'BackupService');
+        await this.generateSQLBackup(sqlFile);
+        this.logger.log(`Monthly SQL backup updated: ${filename}`, 'BackupService');
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to update monthly SQL backup: ${errorMsg}`, 'BackupService');
+    }
+  }
+
+  private async generateSQLBackup(filePath: string): Promise<void> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { exec } = require('child_process');
+        const dbUrl = process.env.DATABASE_URL;
+        
+        if (!dbUrl) {
+          throw new Error('DATABASE_URL not found');
+        }
+
+        // Parse DATABASE_URL: postgresql://user:password@host:port/database
+        const urlMatch = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
+        if (!urlMatch) {
+          throw new Error('Invalid DATABASE_URL format');
+        }
+
+        const [, user, , , , database] = urlMatch;
+
+        // Use docker exec to run pg_dump inside the postgres container
+        const command = `docker exec pump-db pg_dump -U ${user} -d ${database} -F p > "${filePath}"`;
+        
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            this.logger.error(`SQL backup error: ${error.message}`, 'BackupService');
+            reject(error);
+            return;
+          }
+          if (stderr && !stderr.includes('WARNING')) {
+            this.logger.warn(`SQL backup warning: ${stderr}`, 'BackupService');
+          }
+          this.logger.log(`SQL backup created: ${filePath}`, 'BackupService');
+          resolve();
+        });
+      } catch (error) {
+        this.logger.error('SQL backup generation error', error instanceof Error ? error.message : 'Unknown', 'BackupService');
+        reject(error);
+      }
+    });
   }
 }

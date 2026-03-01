@@ -180,8 +180,20 @@ export default function SalesPage() {
         toast.warning("Customer Required", "Please select a customer");
         return;
       }
+      if (!amount || Number(amount) <= 0) {
+        toast.warning("Amount Required", "Please enter a valid amount");
+        return;
+      }
       if (Number(amount) > maxPayable) {
         toast.warning("Amount Exceeds", `Maximum payable is Rs. ${maxPayable}`);
+        return;
+      }
+      if (!paymentMethod) {
+        toast.warning("Payment Method Required", "Please select a payment method");
+        return;
+      }
+      if ((paymentMethod === "CARD" || paymentMethod === "ONLINE") && !selectedAccount) {
+        toast.warning("Account Required", "Please select payment account for card/online payment");
         return;
       }
       setIsLoading(true);

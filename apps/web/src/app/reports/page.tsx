@@ -702,6 +702,14 @@ export default function ReportsPage() {
                   {q.label}
                 </button>
               ))}
+              {(dateRange.start || dateRange.end) && (
+                <button
+                  onClick={() => setDateRange({ start: "", end: "" })}
+                  className="px-3 py-1.5 rounded-xl border border-rose-800 bg-rose-500/10 text-[10px] font-bold text-rose-500 hover:text-rose-400 hover:border-rose-700 transition-all"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
             <div className="h-6 w-px bg-zinc-800 mx-2" />
@@ -2070,7 +2078,7 @@ export default function ReportsPage() {
                       Rs.{" "}
                       {(
                         data.grouped?.ASSET?.find(
-                          (a: any) => a.code === "10001",
+                          (a: any) => a.code === "10101",
                         )?.balance || 0
                       ).toLocaleString()}
                     </p>
@@ -2082,10 +2090,9 @@ export default function ReportsPage() {
                     <p className="text-2xl font-black text-zinc-100">
                       Rs.{" "}
                       {(
-                        data.grouped?.ASSET?.filter((a: any) =>
-                          a.code.startsWith("101"),
-                        ).reduce((sum: number, a: any) => sum + a.balance, 0) ||
-                        0
+                        data.grouped?.ASSET?.find(
+                          (a: any) => a.code === "10201",
+                        )?.balance || 0
                       ).toLocaleString()}
                     </p>
                   </div>
@@ -2096,10 +2103,9 @@ export default function ReportsPage() {
                     <p className="text-2xl font-black text-emerald-500">
                       Rs.{" "}
                       {(
-                        data.grouped?.ASSET?.filter(
-                          (a: any) => a.code === "10201",
-                        ).reduce((sum: number, a: any) => sum + a.balance, 0) ||
-                        0
+                        data.grouped?.ASSET?.find(
+                          (a: any) => a.code === "10301",
+                        )?.balance || 0
                       ).toLocaleString()}
                     </p>
                   </div>

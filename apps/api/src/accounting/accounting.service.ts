@@ -20,8 +20,8 @@ export class AccountingService implements OnModuleInit {
 
   async onModuleInit() {
     await this.seedAccounts();
-    // await this.seedPaymentAccounts();
     await this.syncInventoryAccountBalance();
+    await this.syncPaymentAccountsWithBank();
   }
 
   async seedAccounts() {
@@ -132,6 +132,11 @@ export class AccountingService implements OnModuleInit {
 
     await this.updateAccountBalance(debitAcc.id);
     await this.updateAccountBalance(creditAcc.id);
+
+    // If payment account is involved, update its balance
+    if (data.paymentAccountId) {
+      await this.updatePaymentAccountBalance(data.paymentAccountId, data.amount, debitAcc.code);
+    }
 
     return tx;
   }
@@ -416,9 +421,109 @@ export class AccountingService implements OnModuleInit {
     return updated;
   }
 
+  async setAccountBalance(id: string, balance: number, userId?: string) {
+    const account = await this.getAccountById(id);
+
+    const updated = await this.prisma.account.update({
+      where: { id },
+      data: { balance },
+    });
+
+    this.logger.logBusinessOperation(
+      'UPDATE_ACCOUNT_BALANCE',
+      `${account.code} - ${account.name}: Rs. ${balance.toLocaleString()}`,
+      userId,
+    );
+
+    return updated;
+  }
+
   async getPaymentAccounts() {
     return this.prisma.paymentAccount.findMany({
       orderBy: { name: 'asc' },
     });
+  }
+
+  private async updatePaymentAccountBalance(
+    paymentAccountId: string,
+    amount: number,
+    debitCode: string,
+  ) {
+    const paymentAccount = await this.prisma.paymentAccount.findUnique({
+      where: { id: paymentAccountId },
+    });
+
+    if (!paymentAccount) return;
+
+    const currentBalance = Number(paymentAccount.balance || 0);
+    let newBalance = currentBalance;
+
+    // If debit is Bank Account (10201), it means money is coming IN
+    if (debitCode === '10201') {
+      newBalance = currentBalance + amount;
+    }
+    // If credit is Bank Account (10201), it means money is going OUT
+    else {
+      newBalance = currentBalance - amount;
+    }
+
+    await this.prisma.paymentAccount.update({
+      where: { id: paymentAccountId },
+      data: { balance: newBalance },
+    });
+
+    // Sync Bank Account balance with sum of all payment accounts
+    await this.syncPaymentAccountsWithBank();
+  }
+
+  private async syncPaymentAccountsWithBank() {
+    const paymentAccounts = await this.prisma.paymentAccount.findMany();
+    
+    const totalPaymentBalance = paymentAccounts.reduce(
+      (sum, pa) => sum + Number(pa.balance || 0),
+      0,
+    );
+
+    const bankAccount = await this.prisma.account.findUnique({
+      where: { code: '10201' },
+    });
+
+    if (!bankAccount) return;
+
+    const currentBankBalance = Number(bankAccount.balance);
+    const difference = totalPaymentBalance - currentBankBalance;
+
+    // If there's a difference, create adjustment transaction
+    if (Math.abs(difference) > 0.01) {
+      const equityAccount = await this.prisma.account.findFirst({
+        where: { code: '30101' },
+      });
+
+      if (equityAccount) {
+        if (difference > 0) {
+          // Bank balance is less than payment accounts, increase it
+          await this.createTransaction({
+            debitCode: '10201',
+            creditCode: '30101',
+            amount: Math.abs(difference),
+            description: 'Bank Account sync with payment accounts',
+          });
+        } else {
+          // Bank balance is more than payment accounts, decrease it
+          await this.createTransaction({
+            debitCode: '30101',
+            creditCode: '10201',
+            amount: Math.abs(difference),
+            description: 'Bank Account sync with payment accounts',
+          });
+        }
+      }
+    }
+
+    this.logger.logBusinessOperation(
+      'SYNC_PAYMENT_ACCOUNTS',
+      `Bank Account synced with payment accounts. Total: Rs. ${totalPaymentBalance.toLocaleString()}`,
+      'SYSTEM',
+    );
   }
 }

@@ -26,6 +26,8 @@ export default function ChartOfAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editingBalance, setEditingBalance] = useState<string | null>(null);
+  const [balanceValue, setBalanceValue] = useState("");
   const [formData, setFormData] = useState({
     code: "",
     name: "",
@@ -74,6 +76,19 @@ export default function ChartOfAccountsPage() {
       fetchAccounts();
     } catch (error: any) {
       alert(error.response?.data?.message || "Delete failed");
+    }
+  };
+
+  const handleUpdateBalance = async (id: string, code: string, name: string) => {
+    try {
+      await api.patch(`/accounting/accounts/${id}/balance`, {
+        balance: parseFloat(balanceValue),
+      });
+      setEditingBalance(null);
+      setBalanceValue("");
+      fetchAccounts();
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Update failed");
     }
   };
 
@@ -214,7 +229,35 @@ export default function ChartOfAccountsPage() {
                             {account.name}
                           </td>
                           <td className="px-6 py-4 text-right font-mono text-zinc-300">
-                            Rs. {account.balance.toLocaleString()}
+                            {editingBalance === account.id ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={balanceValue}
+                                  onChange={(e) => setBalanceValue(e.target.value)}
+                                  className="w-32 px-2 py-1 text-sm rounded border border-zinc-700 bg-zinc-900 text-zinc-100"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={() => handleUpdateBalance(account.id, account.code, account.name)}
+                                  className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEditingBalance(null);
+                                    setBalanceValue("");
+                                  }}
+                                  className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <span>Rs. {account.balance.toLocaleString()}</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-center">
                             <span className="px-3 py-1 rounded-full bg-zinc-800 text-zinc-400 text-xs font-bold">
@@ -223,13 +266,26 @@ export default function ChartOfAccountsPage() {
                           </td>
                           {user?.role === "ADMIN" && (
                             <td className="px-6 py-4 text-right space-x-2">
-                              <button
-                                onClick={() => openEditModal(account)}
-                                className="px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg text-xs font-bold transition-colors"
-                              >
-                                Edit
-                              </button>
-                              {txCount === 0 && (
+                              {account.code === "10101" && !editingBalance && (
+                                <button
+                                  onClick={() => {
+                                    setEditingBalance(account.id);
+                                    setBalanceValue(account.balance.toString());
+                                  }}
+                                  className="px-3 py-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 rounded-lg text-xs font-bold transition-colors"
+                                >
+                                  Edit Cash
+                                </button>
+                              )}
+                              {!editingBalance && (
+                                <button
+                                  onClick={() => openEditModal(account)}
+                                  className="px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg text-xs font-bold transition-colors"
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {txCount === 0 && !editingBalance && (
                                 <>
                                   <button
                                     onClick={() =>

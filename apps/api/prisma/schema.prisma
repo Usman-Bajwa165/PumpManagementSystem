@@ -132,6 +132,7 @@ model PaymentAccount {
   name        String
   type        String   // CARD, ONLINE
   accountNumber String?
+  balance     Decimal  @default(0) @db.Decimal(15, 2)
   createdAt   DateTime @default(now())
   
   transactions Transaction[]

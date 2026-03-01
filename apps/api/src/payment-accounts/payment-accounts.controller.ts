@@ -37,20 +37,20 @@ export class PaymentAccountsController {
     return this.service.delete(id);
   }
 
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() data: { name?: string; type?: string; accountNumber?: string },
+    @Body() data: { name?: string; type?: string; accountNumber?: string; balance?: number },
   ) {
     return this.service.update(id, data);
   }
 
-  @Roles(Role.ADMIN, Role.MANAGER)
+  @Roles(Role.ADMIN)
   @Put(':id')
   updatePut(
     @Param('id') id: string,
-    @Body() data: { name?: string; type?: string; accountNumber?: string },
+    @Body() data: { name?: string; type?: string; accountNumber?: string; balance?: number },
   ) {
     return this.service.update(id, data);
   }

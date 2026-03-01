@@ -285,8 +285,6 @@ export class SalesService {
         );
       }
 
-      await this.accountingService.syncInventoryAccountBalance();
-
       return tx;
     } catch (error: any) {
       this.logger.error(

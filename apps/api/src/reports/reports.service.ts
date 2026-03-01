@@ -1309,29 +1309,38 @@ export class ReportsService {
         include: { debitAccount: true, creditAccount: true },
       });
 
-      // Calculate balances for each account based on transactions
-      const accountBalances = new Map<string, number>();
-      accounts.forEach((a) => accountBalances.set(a.id, 0));
+      // Calculate NET balances: debits - credits for each account
+      const accountBalances = new Map<string, { debits: number; credits: number }>();
+      accounts.forEach((a) => accountBalances.set(a.id, { debits: 0, credits: 0 }));
 
       transactions.forEach((tx) => {
-        const debitBal = accountBalances.get(tx.debitAccountId) || 0;
-        const creditBal = accountBalances.get(tx.creditAccountId) || 0;
-        accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
-        accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
+        const amount = Number(tx.amount);
+        
+        // Debit side
+        const debitBal = accountBalances.get(tx.debitAccountId);
+        if (debitBal) {
+          debitBal.debits += amount;
+        }
+        
+        // Credit side
+        const creditBal = accountBalances.get(tx.creditAccountId);
+        if (creditBal) {
+          creditBal.credits += amount;
+        }
       });
 
       const trialBalance = accounts.map((a) => {
-        const bal = accountBalances.get(a.id) || 0;
-        const isDebitNature = a.type === 'ASSET' || a.type === 'EXPENSE';
+        const bal = accountBalances.get(a.id) || { debits: 0, credits: 0 };
+        const netBalance = bal.debits - bal.credits;
 
         return {
           id: a.id,
           code: a.code,
           name: a.name,
           type: a.type,
-          debit: isDebitNature ? bal : 0,
-          credit: !isDebitNature ? bal : 0,
-          balance: bal,
+          debit: netBalance > 0 ? netBalance : 0,
+          credit: netBalance < 0 ? Math.abs(netBalance) : 0,
+          balance: netBalance,
         };
       });
 

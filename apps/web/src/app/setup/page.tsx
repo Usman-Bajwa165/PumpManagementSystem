@@ -14,9 +14,14 @@ export default function SetupPage() {
   const [nozzles, setNozzles] = useState<any[]>([]);
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("products");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('setupActiveTab') || 'products';
+    }
+    return 'products';
+  });
   const [editingPayment, setEditingPayment] = useState<string | null>(null);
-  const [editPaymentData, setEditPaymentData] = useState({ name: "", type: "", accountNumber: "" });
+  const [editPaymentData, setEditPaymentData] = useState({ name: "", type: "", accountNumber: "", balance: "" });
   const toast = useToast();
   const { user } = useAuth();
   const router = useRouter();
@@ -25,7 +30,7 @@ export default function SetupPage() {
   const [productForm, setProductForm] = useState({ name: "", sellingPrice: "", purchasePrice: "" });
   const [tankForm, setTankForm] = useState({ name: "", capacity: "", productId: "", currentStock: "" });
   const [nozzleForm, setNozzleForm] = useState({ name: "", tankId: "", lastReading: "" });
-  const [paymentForm, setPaymentForm] = useState({ name: "", type: "ONLINE", accountNumber: "" });
+  const [paymentForm, setPaymentForm] = useState({ name: "", type: "ONLINE", accountNumber: "", balance: "" });
   const [stockWarning, setStockWarning] = useState("");
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editSellingPrice, setEditSellingPrice] = useState("");
@@ -40,6 +45,12 @@ export default function SetupPage() {
   const nozzleNameRef = useRef<HTMLInputElement>(null);
   const nozzleTankRef = useRef<HTMLSelectElement>(null);
   const nozzleReadingRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('setupActiveTab', activeTab);
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === "products") {
@@ -188,9 +199,12 @@ export default function SetupPage() {
   const handleCreatePaymentAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post("/payment-accounts", paymentForm);
+      await api.post("/payment-accounts", {
+        ...paymentForm,
+        balance: paymentForm.balance ? parseFloat(paymentForm.balance) : undefined,
+      });
       toast.success("Payment Account Created", `${paymentForm.name} added successfully`);
-      setPaymentForm({ name: "", type: "ONLINE", accountNumber: "" });
+      setPaymentForm({ name: "", type: "ONLINE", accountNumber: "", balance: "" });
       fetchData();
     } catch (err: any) {
       toast.error("Creation Failed", err.response?.data?.message || "Unable to create payment account");
@@ -210,10 +224,13 @@ export default function SetupPage() {
 
   const handleUpdatePaymentAccount = async (id: string, name: string) => {
     try {
-      await api.put(`/payment-accounts/${id}`, editPaymentData);
+      await api.put(`/payment-accounts/${id}`, {
+        ...editPaymentData,
+        balance: editPaymentData.balance ? parseFloat(editPaymentData.balance) : undefined,
+      });
       toast.success("Updated", `${name} updated successfully`);
       setEditingPayment(null);
-      setEditPaymentData({ name: "", type: "", accountNumber: "" });
+      setEditPaymentData({ name: "", type: "", accountNumber: "", balance: "" });
       fetchData();
     } catch (err: any) {
       toast.error("Failed", err.response?.data?.message || "Unable to update");
@@ -731,6 +748,19 @@ export default function SetupPage() {
                     placeholder="03XX-XXXXXXX or Account #"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                    Opening Balance (Optional)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={paymentForm.balance}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, balance: e.target.value })}
+                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    placeholder="0.00"
+                  />
+                </div>
                 <button
                   type="submit"
                   className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
@@ -779,6 +809,14 @@ export default function SetupPage() {
                               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                               placeholder="Account Number (Optional)"
                             />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editPaymentData.balance}
+                              onChange={(e) => setEditPaymentData({ ...editPaymentData, balance: e.target.value })}
+                              className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
+                              placeholder="Balance (Rs.)"
+                            />
                             <div className="flex gap-2">
                               <button
                                 onClick={() => handleUpdatePaymentAccount(pa.id, pa.name)}
@@ -789,7 +827,7 @@ export default function SetupPage() {
                               <button
                                 onClick={() => {
                                   setEditingPayment(null);
-                                  setEditPaymentData({ name: "", type: "", accountNumber: "" });
+                                  setEditPaymentData({ name: "", type: "", accountNumber: "", balance: "" });
                                 }}
                                 className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
                               >
@@ -803,6 +841,9 @@ export default function SetupPage() {
                             <p className="text-sm text-zinc-500">
                               {pa.type} {pa.accountNumber && `| ${pa.accountNumber}`}
                             </p>
+                            <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                              Balance: Rs. {(pa.balance || 0).toLocaleString()}
+                            </p>
                           </>
                         )}
                       </div>
@@ -811,7 +852,7 @@ export default function SetupPage() {
                           <button
                             onClick={() => {
                               setEditingPayment(pa.id);
-                              setEditPaymentData({ name: pa.name, type: pa.type, accountNumber: pa.accountNumber || "" });
+                              setEditPaymentData({ name: pa.name, type: pa.type, accountNumber: pa.accountNumber || "", balance: pa.balance?.toString() || "0" });
                             }}
                             className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
                           >

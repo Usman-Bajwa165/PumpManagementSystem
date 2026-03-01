@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -56,6 +57,16 @@ export class AccountingController {
     @Request() req,
   ) {
     return this.accountingService.updateAccount(id, dto, req.user.userId);
+  }
+
+  @Roles(Role.ADMIN)
+  @Patch('accounts/:id/balance')
+  async updateAccountBalance(
+    @Param('id') id: string,
+    @Body() data: { balance: number },
+    @Request() req,
+  ) {
+    return this.accountingService.setAccountBalance(id, data.balance, req.user.userId);
   }
 
   @Roles(Role.ADMIN)
