@@ -7,6 +7,8 @@ import {
   Patch,
   Put,
   Post,
+  Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { PaymentAccountsService } from './payment-accounts.service';
@@ -22,8 +24,28 @@ export class PaymentAccountsController {
 
   @Roles(Role.ADMIN, Role.MANAGER)
   @Post()
-  create(@Body() data: { name: string; type: string; accountNumber?: string }) {
-    return this.service.create(data);
+  create(
+    @Body()
+    data: {
+      name: string;
+      type: string;
+      accountNumber?: string;
+      balance?: number;
+    },
+    @Req() req: { user?: { userId?: string; sub?: string } },
+  ) {
+    return this.service.create(data, req.user?.userId || req.user?.sub);
+  }
+
+  @Get('logs')
+  getLogs(
+    @Query('accountId') accountId?: string,
+    @Query('type') type?: string,
+    @Query('subType') subType?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.service.getLogs(accountId, type, subType, startDate, endDate);
   }
 
   @Get()
@@ -41,17 +63,31 @@ export class PaymentAccountsController {
   @Patch(':id')
   update(
     @Param('id') id: string,
-    @Body() data: { name?: string; type?: string; accountNumber?: string; balance?: number },
+    @Body()
+    data: {
+      name?: string;
+      type?: string;
+      accountNumber?: string;
+      balance?: number;
+    },
+    @Req() req: { user?: { userId?: string; sub?: string } },
   ) {
-    return this.service.update(id, data);
+    return this.service.update(id, data, req.user?.userId || req.user?.sub);
   }
 
   @Roles(Role.ADMIN)
   @Put(':id')
   updatePut(
     @Param('id') id: string,
-    @Body() data: { name?: string; type?: string; accountNumber?: string; balance?: number },
+    @Body()
+    data: {
+      name?: string;
+      type?: string;
+      accountNumber?: string;
+      balance?: number;
+    },
+    @Req() req: { user?: { userId?: string; sub?: string } },
   ) {
-    return this.service.update(id, data);
+    return this.service.update(id, data, req.user?.userId || req.user?.sub);
   }
 }

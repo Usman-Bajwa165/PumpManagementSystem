@@ -197,6 +197,19 @@ export class SalesService {
           Number(nozzle.tank.product.purchasePrice)) *
         dto.quantity;
 
+      // Get payment account name and number if provided
+      let paymentAccountInfo: string | undefined;
+      if (dto.paymentAccountId) {
+        const paymentAccount = await this.prisma.paymentAccount.findUnique({
+          where: { id: dto.paymentAccountId },
+        });
+        if (paymentAccount) {
+          paymentAccountInfo = paymentAccount.accountNumber
+            ? `${paymentAccount.name} - ${paymentAccount.accountNumber}`
+            : paymentAccount.name;
+        }
+      }
+
       const tx = await this.accountingService.createTransaction({
         debitCode: debitAccountCode,
         creditCode: incomeAccountCode,
@@ -204,7 +217,7 @@ export class SalesService {
         profit,
         description:
           dto.description ||
-          `${nozzle.name} - ${dto.quantity}L ${nozzle.tank.product.name} - ${dto.paymentMethod}${dto.customerName ? ` - ${dto.customerName}` : ''}${dto.vehicleNumber ? ` (${dto.vehicleNumber})` : ''}${dto.paymentAccountId ? ` [Account: ${dto.paymentAccountId}]` : ''}`,
+          `${nozzle.name} - ${dto.quantity}L ${nozzle.tank.product.name} - ${dto.paymentMethod}${dto.customerName ? ` - ${dto.customerName}` : ''}${dto.vehicleNumber ? ` (${dto.vehicleNumber})` : ''}${paymentAccountInfo ? ` [${paymentAccountInfo}]` : ''}`,
         shiftId: shift.id,
         customerId,
         createdById: userId,

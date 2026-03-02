@@ -701,11 +701,11 @@ export class ReportsService {
       { count: number; amount: number }
     >();
 
-    let records = transactions.map((t: any) => {
+    const records = transactions.map((t: any) => {
       const amount = Number(t.amount);
       const qty = Number(t.quantity || 0);
-      const fuelName = (t as any).product?.name || 'Unknown';
-      const nozzleName = (t as any).nozzle?.name || 'Unknown';
+      const fuelName = t.product?.name || 'Unknown';
+      const nozzleName = t.nozzle?.name || 'Unknown';
 
       // Fuel Type Summary
       const fuelTotal = fuelTypeMap.get(fuelName) || { quantity: 0, amount: 0 };
@@ -724,11 +724,11 @@ export class ReportsService {
 
       // Payment Method Summary
       let method = 'CASH';
-      if ((t.debitAccount as any)?.code === '10301') {
+      if (t.debitAccount?.code === '10301') {
         method = 'CREDIT';
       } else if (t.paymentAccountId) {
-        method = (t.paymentAccount as any)?.type || 'BANK';
-      } else if ((t.debitAccount as any)?.code === '10101') {
+        method = t.paymentAccount?.type || 'BANK';
+      } else if (t.debitAccount?.code === '10101') {
         method = 'CASH';
       }
 
@@ -742,13 +742,10 @@ export class ReportsService {
 
       // Paid To Logic
       let paidTo = '-';
-      if ((t.debitAccount as any)?.code === '10301') {
+      if (t.debitAccount?.code === '10301') {
         paidTo = 'Account Receivable';
       } else if (t.paymentAccountId) {
-        paidTo =
-          (t.paymentAccount as any)?.name ||
-          (t.paymentAccount as any)?.type ||
-          'Bank';
+        paidTo = t.paymentAccount?.name || t.paymentAccount?.type || 'Bank';
       } else {
         paidTo = 'Cash in Hand';
       }
@@ -756,17 +753,17 @@ export class ReportsService {
       return {
         id: t.id,
         date: t.createdAt,
-        name: (t as any).customer?.name || 'Customer',
-        vehicleNo: (t as any).customer?.vehicleNumber || '---',
+        name: t.customer?.name || 'Customer',
+        vehicleNo: t.customer?.vehicleNumber || '---',
         nozzle: nozzleName,
         fuel: fuelName,
         quantity: qty,
         amount: amount,
         method: method,
         paidTo: paidTo,
-        shift: this.formatShiftName((t as any).shift),
+        shift: this.formatShiftName(t.shift),
         shiftId: t.shiftId,
-        shiftOpener: (t as any).shift?.opener?.username || 'Unknown',
+        shiftOpener: t.shift?.opener?.username || 'Unknown',
       };
     });
 

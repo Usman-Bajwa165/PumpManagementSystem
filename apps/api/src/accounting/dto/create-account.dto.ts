@@ -1,4 +1,12 @@
-import { IsString, IsEnum, IsNumber, IsOptional, Matches, MinLength, MaxLength } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  Matches,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateAccountDto {
   @IsString()

@@ -32,7 +32,10 @@ export class UsersService {
       });
 
       if (existing) {
-        this.logger.warn(`User creation failed: Username ${data.username} already exists`, 'UsersService');
+        this.logger.warn(
+          `User creation failed: Username ${data.username} already exists`,
+          'UsersService',
+        );
         throw new BadRequestException('Username already exists');
       }
 
@@ -52,10 +55,19 @@ export class UsersService {
         },
       });
 
-      this.logger.logBusinessOperation('CREATE_USER', `User ${data.username} created with role ${data.role}`, undefined, true);
+      this.logger.logBusinessOperation(
+        'CREATE_USER',
+        `User ${data.username} created with role ${data.role}`,
+        undefined,
+        true,
+      );
       return user;
     } catch (error: any) {
-      this.logger.error(`User creation failed: ${data.username}`, error.message, 'UsersService');
+      this.logger.error(
+        `User creation failed: ${data.username}`,
+        error.message,
+        'UsersService',
+      );
       throw error;
     }
   }
@@ -73,10 +85,19 @@ export class UsersService {
           updatedAt: true,
         },
       });
-      this.logger.logBusinessOperation('UPDATE_USER_ROLE', `User ${user.username} role changed to ${role}`, undefined, true);
+      this.logger.logBusinessOperation(
+        'UPDATE_USER_ROLE',
+        `User ${user.username} role changed to ${role}`,
+        undefined,
+        true,
+      );
       return user;
     } catch (error: any) {
-      this.logger.error(`User role update failed: ${id}`, error.message, 'UsersService');
+      this.logger.error(
+        `User role update failed: ${id}`,
+        error.message,
+        'UsersService',
+      );
       throw error;
     }
   }
@@ -85,10 +106,19 @@ export class UsersService {
     try {
       const user = await this.prisma.user.findUnique({ where: { id } });
       await this.prisma.user.delete({ where: { id } });
-      this.logger.logBusinessOperation('DELETE_USER', `User ${user?.username} deleted`, undefined, true);
+      this.logger.logBusinessOperation(
+        'DELETE_USER',
+        `User ${user?.username} deleted`,
+        undefined,
+        true,
+      );
       return { success: true, message: 'User deleted successfully' };
     } catch (error: any) {
-      this.logger.error(`User deletion failed: ${id}`, error.message, 'UsersService');
+      this.logger.error(
+        `User deletion failed: ${id}`,
+        error.message,
+        'UsersService',
+      );
       throw error;
     }
   }

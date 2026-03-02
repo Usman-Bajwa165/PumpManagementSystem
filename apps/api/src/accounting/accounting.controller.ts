@@ -66,7 +66,11 @@ export class AccountingController {
     @Body() data: { balance: number },
     @Request() req,
   ) {
-    return this.accountingService.setAccountBalance(id, data.balance, req.user.userId);
+    return this.accountingService.setAccountBalance(
+      id,
+      data.balance,
+      req.user.userId,
+    );
   }
 
   @Roles(Role.ADMIN)

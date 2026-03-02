@@ -76,10 +76,7 @@ export class BackupController {
       body.nightTime || prefs.autoBackupNightTime,
       '00:00',
     );
-    const dayTime = normalize(
-      body.dayTime || prefs.autoBackupDayTime,
-      '12:00',
-    );
+    const dayTime = normalize(body.dayTime || prefs.autoBackupDayTime, '12:00');
 
     const updated = await this.prisma.notificationPreferences.update({
       where: { id: prefs.id },

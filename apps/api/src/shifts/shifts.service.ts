@@ -281,7 +281,7 @@ export class ShiftsService implements OnModuleInit {
           const now = new Date();
           const hours = now.getHours();
           const period = hours >= 12 ? 'D' : 'N';
-          await this.backupService.performBackup(period as 'D' | 'N');
+          await this.backupService.performBackup(period);
         }
       } catch (err) {
         this.logger.error(

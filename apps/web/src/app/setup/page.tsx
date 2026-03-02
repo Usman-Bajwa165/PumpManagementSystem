@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import api from "@/lib/api";
-import { Settings, Plus, Loader2, Trash2 } from "lucide-react";
+import { Settings, Plus, Loader2, Trash2, FileText } from "lucide-react";
+import PaymentAccountLogsModal from "@/components/PaymentAccountLogsModal";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
@@ -15,22 +16,46 @@ export default function SetupPage() {
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('setupActiveTab') || 'products';
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("setupActiveTab") || "products";
     }
-    return 'products';
+    return "products";
   });
   const [editingPayment, setEditingPayment] = useState<string | null>(null);
-  const [editPaymentData, setEditPaymentData] = useState({ name: "", type: "", accountNumber: "", balance: "" });
+  const [editPaymentData, setEditPaymentData] = useState({
+    name: "",
+    type: "",
+    accountNumber: "",
+    balance: "",
+  });
+  const [isLogsModalOpen, setIsLogsModalOpen] = useState(false);
   const toast = useToast();
   const { user } = useAuth();
   const router = useRouter();
   const isReadOnly = user?.role === "OPERATOR";
 
-  const [productForm, setProductForm] = useState({ name: "", sellingPrice: "", purchasePrice: "" });
-  const [tankForm, setTankForm] = useState({ name: "", capacity: "", productId: "", currentStock: "" });
-  const [nozzleForm, setNozzleForm] = useState({ name: "", tankId: "", lastReading: "" });
-  const [paymentForm, setPaymentForm] = useState({ name: "", type: "ONLINE", accountNumber: "", balance: "" });
+  const [productForm, setProductForm] = useState({
+    name: "",
+    sellingPrice: "",
+    purchasePrice: "",
+  });
+  const [tankForm, setTankForm] = useState({
+    name: "",
+    capacity: "",
+    productId: "",
+    currentStock: "",
+  });
+  const [nozzleForm, setNozzleForm] = useState({
+    name: "",
+    tankId: "",
+    lastReading: "",
+  });
+  const [paymentForm, setPaymentForm] = useState({
+    name: "",
+    type: "ONLINE",
+    accountNumber: "",
+    balance: "",
+  });
   const [stockWarning, setStockWarning] = useState("");
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [editSellingPrice, setEditSellingPrice] = useState("");
@@ -47,8 +72,8 @@ export default function SetupPage() {
   const nozzleReadingRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('setupActiveTab', activeTab);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("setupActiveTab", activeTab);
     }
   }, [activeTab]);
 
@@ -69,7 +94,7 @@ export default function SetupPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key === 'Enter') {
+      if (e.shiftKey && e.key === "Enter") {
         e.preventDefault();
         const tabs = ["products", "tanks", "nozzles"];
         const currentIndex = tabs.indexOf(activeTab);
@@ -77,8 +102,8 @@ export default function SetupPage() {
         setActiveTab(tabs[nextIndex]);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [activeTab]);
 
   useEffect(() => {
@@ -87,12 +112,14 @@ export default function SetupPage() {
 
   const fetchData = async () => {
     try {
-      const [productsRes, tanksRes, nozzlesRes, paymentRes] = await Promise.all([
-        api.get("/inventory/products"),
-        api.get("/inventory/tanks"),
-        api.get("/inventory/nozzles"),
-        api.get("/payment-accounts"),
-      ]);
+      const [productsRes, tanksRes, nozzlesRes, paymentRes] = await Promise.all(
+        [
+          api.get("/inventory/products"),
+          api.get("/inventory/tanks"),
+          api.get("/inventory/nozzles"),
+          api.get("/payment-accounts"),
+        ],
+      );
       setProducts(productsRes.data);
       setTanks(tanksRes.data);
       setNozzles(nozzlesRes.data);
@@ -112,12 +139,18 @@ export default function SetupPage() {
         sellingPrice: parseFloat(productForm.sellingPrice),
         purchasePrice: parseFloat(productForm.purchasePrice),
       });
-      toast.success("Product Created", `${productForm.name} added successfully`);
+      toast.success(
+        "Product Created",
+        `${productForm.name} added successfully`,
+      );
       setProductForm({ name: "", sellingPrice: "", purchasePrice: "" });
       fetchData();
       productNameRef.current?.focus();
     } catch (err: any) {
-      toast.error("Creation Failed", err.response?.data?.message || "Unable to create product");
+      toast.error(
+        "Creation Failed",
+        err.response?.data?.message || "Unable to create product",
+      );
     }
   };
 
@@ -126,7 +159,10 @@ export default function SetupPage() {
     const capacity = parseFloat(tankForm.capacity);
     const stock = parseFloat(tankForm.currentStock);
     if (stock > capacity) {
-      toast.warning("Stock Exceeds Capacity", `Capacity: ${capacity}L, Stock: ${stock}L. Stock cannot exceed capacity.`);
+      toast.warning(
+        "Stock Exceeds Capacity",
+        `Capacity: ${capacity}L, Stock: ${stock}L. Stock cannot exceed capacity.`,
+      );
       return;
     }
     try {
@@ -142,7 +178,10 @@ export default function SetupPage() {
       fetchData();
       tankNameRef.current?.focus();
     } catch (err: any) {
-      toast.error("Creation Failed", err.response?.data?.message || "Unable to create tank");
+      toast.error(
+        "Creation Failed",
+        err.response?.data?.message || "Unable to create tank",
+      );
     }
   };
 
@@ -159,7 +198,10 @@ export default function SetupPage() {
       fetchData();
       nozzleNameRef.current?.focus();
     } catch (err: any) {
-      toast.error("Creation Failed", err.response?.data?.message || "Unable to create nozzle");
+      toast.error(
+        "Creation Failed",
+        err.response?.data?.message || "Unable to create nozzle",
+      );
     }
   };
 
@@ -201,13 +243,26 @@ export default function SetupPage() {
     try {
       await api.post("/payment-accounts", {
         ...paymentForm,
-        balance: paymentForm.balance ? parseFloat(paymentForm.balance) : undefined,
+        balance: paymentForm.balance
+          ? parseFloat(paymentForm.balance)
+          : undefined,
       });
-      toast.success("Payment Account Created", `${paymentForm.name} added successfully`);
-      setPaymentForm({ name: "", type: "ONLINE", accountNumber: "", balance: "" });
+      toast.success(
+        "Payment Account Created",
+        `${paymentForm.name} added successfully`,
+      );
+      setPaymentForm({
+        name: "",
+        type: "ONLINE",
+        accountNumber: "",
+        balance: "",
+      });
       fetchData();
     } catch (err: any) {
-      toast.error("Creation Failed", err.response?.data?.message || "Unable to create payment account");
+      toast.error(
+        "Creation Failed",
+        err.response?.data?.message || "Unable to create payment account",
+      );
     }
   };
 
@@ -226,11 +281,18 @@ export default function SetupPage() {
     try {
       await api.put(`/payment-accounts/${id}`, {
         ...editPaymentData,
-        balance: editPaymentData.balance ? parseFloat(editPaymentData.balance) : undefined,
+        balance: editPaymentData.balance
+          ? parseFloat(editPaymentData.balance)
+          : undefined,
       });
       toast.success("Updated", `${name} updated successfully`);
       setEditingPayment(null);
-      setEditPaymentData({ name: "", type: "", accountNumber: "", balance: "" });
+      setEditPaymentData({
+        name: "",
+        type: "",
+        accountNumber: "",
+        balance: "",
+      });
       fetchData();
     } catch (err: any) {
       toast.error("Failed", err.response?.data?.message || "Unable to update");
@@ -239,7 +301,7 @@ export default function SetupPage() {
 
   const handleUpdatePrice = async (id: string, name: string) => {
     try {
-      await api.patch(`/inventory/products/${id}`, { 
+      await api.patch(`/inventory/products/${id}`, {
         sellingPrice: parseFloat(editSellingPrice),
         purchasePrice: parseFloat(editPurchasePrice),
       });
@@ -249,11 +311,12 @@ export default function SetupPage() {
       setEditPurchasePrice("");
       fetchData();
     } catch (err: any) {
-      toast.error("Failed", err.response?.data?.message || "Unable to update prices");
+      toast.error(
+        "Failed",
+        err.response?.data?.message || "Unable to update prices",
+      );
     }
   };
-
-
 
   if (isLoading) {
     return (
@@ -271,10 +334,15 @@ export default function SetupPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight italic flex items-center gap-3">
             <Settings className="text-blue-500" />
-            System Setup {isReadOnly && <span className="text-sm text-zinc-500">(View Only)</span>}
+            System Setup{" "}
+            {isReadOnly && (
+              <span className="text-sm text-zinc-500">(View Only)</span>
+            )}
           </h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-500 mt-1">
-            {isReadOnly ? "View products, tanks, and nozzles configuration." : "Configure products, tanks, and nozzles. Note: Nozzle readings are managed per shift, not here."}
+            {isReadOnly
+              ? "View products, tanks, and nozzles configuration."
+              : "Configure products, tanks, and nozzles. Note: Nozzle readings are managed per shift, not here."}
           </p>
         </div>
 
@@ -297,74 +365,94 @@ export default function SetupPage() {
         {activeTab === "products" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {!isReadOnly && (
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Product</h2>
-              <form onSubmit={handleCreateProduct} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Product Name
-                  </label>
-                  <input
-                    ref={productNameRef}
-                    type="text"
-                    required
-                    value={productForm.name}
-                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        productPriceRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="e.g., Petrol, Diesel, Hi-Octane"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Selling Price per Liter (Rs.)
-                  </label>
-                  <input
-                    ref={productPriceRef}
-                    type="number"
-                    step="0.01"
-                    required
-                    value={productForm.sellingPrice}
-                    onChange={(e) => setProductForm({ ...productForm, sellingPrice: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Purchase Price per Liter (Rs.)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    required
-                    value={productForm.purchasePrice}
-                    onChange={(e) => setProductForm({ ...productForm, purchasePrice: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0.00"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus size={18} />
+              <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
                   Add Product
-                </button>
-              </form>
-            </div>
+                </h2>
+                <form onSubmit={handleCreateProduct} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Product Name
+                    </label>
+                    <input
+                      ref={productNameRef}
+                      type="text"
+                      required
+                      value={productForm.name}
+                      onChange={(e) =>
+                        setProductForm({ ...productForm, name: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          productPriceRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="e.g., Petrol, Diesel, Hi-Octane"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Selling Price per Liter (Rs.)
+                    </label>
+                    <input
+                      ref={productPriceRef}
+                      type="number"
+                      step="0.01"
+                      required
+                      value={productForm.sellingPrice}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          sellingPrice: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Purchase Price per Liter (Rs.)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      required
+                      value={productForm.purchasePrice}
+                      onChange={(e) =>
+                        setProductForm({
+                          ...productForm,
+                          purchasePrice: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Product
+                  </button>
+                </form>
+              </div>
             )}
 
-            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Products</h2>
+            <div
+              className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? "lg:col-span-2" : ""}`}
+            >
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
+                Existing Products
+              </h2>
               <div className="space-y-2">
                 {products.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No products configured yet</p>
+                  <p className="text-sm text-zinc-500">
+                    No products configured yet
+                  </p>
                 ) : (
                   products.map((p) => (
                     <div
@@ -372,27 +460,37 @@ export default function SetupPage() {
                       className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
                       <div className="flex-1">
-                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{p.name}</p>
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                          {p.name}
+                        </p>
                         {editingProduct === p.id ? (
                           <div className="space-y-2 mt-2">
                             <div className="flex items-center gap-2">
-                              <label className="text-xs text-zinc-500 w-16">Selling:</label>
+                              <label className="text-xs text-zinc-500 w-16">
+                                Selling:
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
                                 value={editSellingPrice}
-                                onChange={(e) => setEditSellingPrice(e.target.value)}
+                                onChange={(e) =>
+                                  setEditSellingPrice(e.target.value)
+                                }
                                 className="flex-1 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                                 autoFocus
                               />
                             </div>
                             <div className="flex items-center gap-2">
-                              <label className="text-xs text-zinc-500 w-16">Purchase:</label>
+                              <label className="text-xs text-zinc-500 w-16">
+                                Purchase:
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
                                 value={editPurchasePrice}
-                                onChange={(e) => setEditPurchasePrice(e.target.value)}
+                                onChange={(e) =>
+                                  setEditPurchasePrice(e.target.value)
+                                }
                                 className="flex-1 px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                               />
                             </div>
@@ -432,17 +530,30 @@ export default function SetupPage() {
                             }}
                             className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                              <path d="m15 5 4 4" />
+                            </svg>
                           </button>
                         )}
                         {!isReadOnly && (
-                        <button
-                          onClick={() => handleDeleteProduct(p.id, p.name)}
-                          className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
-                          disabled={editingProduct === p.id}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p.id, p.name)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                            disabled={editingProduct === p.id}
+                          >
+                            <Trash2 size={16} />
+                          </button>
                         )}
                       </div>
                     </div>
@@ -456,116 +567,137 @@ export default function SetupPage() {
         {activeTab === "tanks" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {!isReadOnly && (
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Tank</h2>
-              <form onSubmit={handleCreateTank} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Tank Name
-                  </label>
-                  <input
-                    ref={tankNameRef}
-                    type="text"
-                    required
-                    value={tankForm.name}
-                    onChange={(e) => setTankForm({ ...tankForm, name: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        tankProductRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="e.g., Tank A, Tank 1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Product
-                  </label>
-                  <select
-                    ref={tankProductRef}
-                    required
-                    value={tankForm.productId}
-                    onChange={(e) => setTankForm({ ...tankForm, productId: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && tankForm.productId) {
-                        e.preventDefault();
-                        tankCapacityRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="">Select Product</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Capacity (Liters)
-                  </label>
-                  <input
-                    ref={tankCapacityRef}
-                    type="number"
-                    required
-                    value={tankForm.capacity}
-                    onChange={(e) => setTankForm({ ...tankForm, capacity: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        tankStockRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Current Stock (Liters)
-                  </label>
-                  <input
-                    ref={tankStockRef}
-                    type="number"
-                    required
-                    value={tankForm.currentStock}
-                    onChange={(e) => {
-                      setTankForm({ ...tankForm, currentStock: e.target.value });
-                      const capacity = parseFloat(tankForm.capacity);
-                      const stock = parseFloat(e.target.value);
-                      if (stock > capacity && capacity > 0) {
-                        setStockWarning(`Capacity: ${capacity}L, Stock: ${stock}L, Total: ${stock}L. Stock cannot exceed capacity!`);
-                      } else {
-                        setStockWarning("");
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0"
-                  />
-                  {stockWarning && (
-                    <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-semibold">{stockWarning}</p>
-                  )}
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus size={18} />
+              <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
                   Add Tank
-                </button>
-              </form>
-            </div>
+                </h2>
+                <form onSubmit={handleCreateTank} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Tank Name
+                    </label>
+                    <input
+                      ref={tankNameRef}
+                      type="text"
+                      required
+                      value={tankForm.name}
+                      onChange={(e) =>
+                        setTankForm({ ...tankForm, name: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          tankProductRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="e.g., Tank A, Tank 1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Product
+                    </label>
+                    <select
+                      ref={tankProductRef}
+                      required
+                      value={tankForm.productId}
+                      onChange={(e) =>
+                        setTankForm({ ...tankForm, productId: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && tankForm.productId) {
+                          e.preventDefault();
+                          tankCapacityRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="">Select Product</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Capacity (Liters)
+                    </label>
+                    <input
+                      ref={tankCapacityRef}
+                      type="number"
+                      required
+                      value={tankForm.capacity}
+                      onChange={(e) =>
+                        setTankForm({ ...tankForm, capacity: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          tankStockRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Current Stock (Liters)
+                    </label>
+                    <input
+                      ref={tankStockRef}
+                      type="number"
+                      required
+                      value={tankForm.currentStock}
+                      onChange={(e) => {
+                        setTankForm({
+                          ...tankForm,
+                          currentStock: e.target.value,
+                        });
+                        const capacity = parseFloat(tankForm.capacity);
+                        const stock = parseFloat(e.target.value);
+                        if (stock > capacity && capacity > 0) {
+                          setStockWarning(
+                            `Capacity: ${capacity}L, Stock: ${stock}L, Total: ${stock}L. Stock cannot exceed capacity!`,
+                          );
+                        } else {
+                          setStockWarning("");
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0"
+                    />
+                    {stockWarning && (
+                      <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-semibold">
+                        {stockWarning}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Tank
+                  </button>
+                </form>
+              </div>
             )}
 
-            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Tanks</h2>
+            <div
+              className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? "lg:col-span-2" : ""}`}
+            >
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
+                Existing Tanks
+              </h2>
               <div className="space-y-2">
                 {tanks.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No tanks configured yet</p>
+                  <p className="text-sm text-zinc-500">
+                    No tanks configured yet
+                  </p>
                 ) : (
                   tanks.map((t) => (
                     <div
@@ -573,18 +705,20 @@ export default function SetupPage() {
                       className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
                       <div>
-                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{t.name}</p>
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                          {t.name}
+                        </p>
                         <p className="text-sm text-zinc-500">
                           {t.product?.name} | {t.currentStock}/{t.capacity}L
                         </p>
                       </div>
                       {!isReadOnly && (
-                      <button
-                        onClick={() => handleDeleteTank(t.id, t.name)}
-                        className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <button
+                          onClick={() => handleDeleteTank(t.id, t.name)}
+                          className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       )}
                     </div>
                   ))
@@ -597,85 +731,102 @@ export default function SetupPage() {
         {activeTab === "nozzles" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {!isReadOnly && (
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Nozzle</h2>
-              <form onSubmit={handleCreateNozzle} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Nozzle Name
-                  </label>
-                  <input
-                    ref={nozzleNameRef}
-                    type="text"
-                    required
-                    value={nozzleForm.name}
-                    onChange={(e) => setNozzleForm({ ...nozzleForm, name: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        nozzleTankRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="e.g., Nozzle 1, Pump A"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Tank
-                  </label>
-                  <select
-                    ref={nozzleTankRef}
-                    required
-                    value={nozzleForm.tankId}
-                    onChange={(e) => setNozzleForm({ ...nozzleForm, tankId: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && nozzleForm.tankId) {
-                        e.preventDefault();
-                        nozzleReadingRef.current?.focus();
-                      }
-                    }}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="">Select Tank</option>
-                    {tanks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name} ({t.product?.name})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Initial Reading
-                  </label>
-                  <input
-                    ref={nozzleReadingRef}
-                    type="number"
-                    step="0.01"
-                    required
-                    value={nozzleForm.lastReading}
-                    onChange={(e) => setNozzleForm({ ...nozzleForm, lastReading: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0.00"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus size={18} />
+              <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
                   Add Nozzle
-                </button>
-              </form>
-            </div>
+                </h2>
+                <form onSubmit={handleCreateNozzle} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Nozzle Name
+                    </label>
+                    <input
+                      ref={nozzleNameRef}
+                      type="text"
+                      required
+                      value={nozzleForm.name}
+                      onChange={(e) =>
+                        setNozzleForm({ ...nozzleForm, name: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          nozzleTankRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="e.g., Nozzle 1, Pump A"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Tank
+                    </label>
+                    <select
+                      ref={nozzleTankRef}
+                      required
+                      value={nozzleForm.tankId}
+                      onChange={(e) =>
+                        setNozzleForm({ ...nozzleForm, tankId: e.target.value })
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && nozzleForm.tankId) {
+                          e.preventDefault();
+                          nozzleReadingRef.current?.focus();
+                        }
+                      }}
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="">Select Tank</option>
+                      {tanks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} ({t.product?.name})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Initial Reading
+                    </label>
+                    <input
+                      ref={nozzleReadingRef}
+                      type="number"
+                      step="0.01"
+                      required
+                      value={nozzleForm.lastReading}
+                      onChange={(e) =>
+                        setNozzleForm({
+                          ...nozzleForm,
+                          lastReading: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Nozzle
+                  </button>
+                </form>
+              </div>
             )}
 
-            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Nozzles</h2>
+            <div
+              className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? "lg:col-span-2" : ""}`}
+            >
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
+                Existing Nozzles
+              </h2>
               <div className="space-y-2">
                 {nozzles.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No nozzles configured yet</p>
+                  <p className="text-sm text-zinc-500">
+                    No nozzles configured yet
+                  </p>
                 ) : (
                   nozzles.map((n) => (
                     <div
@@ -683,18 +834,20 @@ export default function SetupPage() {
                       className="flex items-center justify-between p-3 rounded-lg bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800"
                     >
                       <div>
-                        <p className="font-bold text-zinc-900 dark:text-zinc-100">{n.name}</p>
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                          {n.name}
+                        </p>
                         <p className="text-sm text-zinc-500">
                           {n.tank?.name} | Reading: {n.lastReading}
                         </p>
                       </div>
                       {!isReadOnly && (
-                      <button
-                        onClick={() => handleDeleteNozzle(n.id, n.name)}
-                        className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                        <button
+                          onClick={() => handleDeleteNozzle(n.id, n.name)}
+                          className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       )}
                     </div>
                   ))
@@ -707,76 +860,110 @@ export default function SetupPage() {
         {activeTab === "payments" && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {!isReadOnly && (
-            <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Add Payment Account</h2>
-              <form onSubmit={handleCreatePaymentAccount} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Account Name
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={paymentForm.name}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, name: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="e.g., JazzCash, EasyPaisa, Bank Transfer"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Type
-                  </label>
-                  <select
-                    value={paymentForm.type}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, type: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                  >
-                    <option value="ONLINE">Online</option>
-                    <option value="CARD">Card</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Account Number (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={paymentForm.accountNumber}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, accountNumber: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="03XX-XXXXXXX or Account #"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                    Opening Balance (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={paymentForm.balance}
-                    onChange={(e) => setPaymentForm({ ...paymentForm, balance: e.target.value })}
-                    className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
-                    placeholder="0.00"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
-                >
-                  <Plus size={18} />
+              <div className="p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">
                   Add Payment Account
-                </button>
-              </form>
-            </div>
+                </h2>
+                <form
+                  onSubmit={handleCreatePaymentAccount}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Account Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={paymentForm.name}
+                      onChange={(e) =>
+                        setPaymentForm({ ...paymentForm, name: e.target.value })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="e.g., JazzCash, EasyPaisa, Bank Transfer"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Type
+                    </label>
+                    <select
+                      value={paymentForm.type}
+                      onChange={(e) =>
+                        setPaymentForm({ ...paymentForm, type: e.target.value })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                    >
+                      <option value="ONLINE">Online</option>
+                      <option value="CARD">Card</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Account Number (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={paymentForm.accountNumber}
+                      onChange={(e) =>
+                        setPaymentForm({
+                          ...paymentForm,
+                          accountNumber: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="03XX-XXXXXXX or Account #"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+                      Opening Balance (Optional)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={paymentForm.balance}
+                      onChange={(e) =>
+                        setPaymentForm({
+                          ...paymentForm,
+                          balance: e.target.value,
+                        })
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Plus size={18} />
+                    Add Payment Account
+                  </button>
+                </form>
+              </div>
             )}
 
-            <div className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? 'lg:col-span-2' : ''}`}>
-              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mb-4">Existing Payment Accounts</h2>
+            <div
+              className={`p-6 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 ${isReadOnly ? "lg:col-span-2" : ""}`}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  Existing Payment Accounts
+                </h2>
+                <button
+                  onClick={() => setIsLogsModalOpen(true)}
+                  className="px-4 py-2 text-sm font-bold text-zinc-700 bg-zinc-100 hover:bg-zinc-200 dark:text-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <FileText size={16} />
+                  View Logs
+                </button>
+              </div>
               <div className="space-y-2">
                 {paymentAccounts.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No payment accounts configured yet</p>
+                  <p className="text-sm text-zinc-500">
+                    No payment accounts configured yet
+                  </p>
                 ) : (
                   paymentAccounts.map((pa) => (
                     <div
@@ -789,14 +976,24 @@ export default function SetupPage() {
                             <input
                               type="text"
                               value={editPaymentData.name}
-                              onChange={(e) => setEditPaymentData({ ...editPaymentData, name: e.target.value })}
+                              onChange={(e) =>
+                                setEditPaymentData({
+                                  ...editPaymentData,
+                                  name: e.target.value,
+                                })
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                               placeholder="Account Name"
                               autoFocus
                             />
                             <select
                               value={editPaymentData.type}
-                              onChange={(e) => setEditPaymentData({ ...editPaymentData, type: e.target.value })}
+                              onChange={(e) =>
+                                setEditPaymentData({
+                                  ...editPaymentData,
+                                  type: e.target.value,
+                                })
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                             >
                               <option value="ONLINE">Online</option>
@@ -805,7 +1002,12 @@ export default function SetupPage() {
                             <input
                               type="text"
                               value={editPaymentData.accountNumber}
-                              onChange={(e) => setEditPaymentData({ ...editPaymentData, accountNumber: e.target.value })}
+                              onChange={(e) =>
+                                setEditPaymentData({
+                                  ...editPaymentData,
+                                  accountNumber: e.target.value,
+                                })
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                               placeholder="Account Number (Optional)"
                             />
@@ -813,13 +1015,20 @@ export default function SetupPage() {
                               type="number"
                               step="0.01"
                               value={editPaymentData.balance}
-                              onChange={(e) => setEditPaymentData({ ...editPaymentData, balance: e.target.value })}
+                              onChange={(e) =>
+                                setEditPaymentData({
+                                  ...editPaymentData,
+                                  balance: e.target.value,
+                                })
+                              }
                               className="w-full px-2 py-1 text-sm rounded border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900"
                               placeholder="Balance (Rs.)"
                             />
                             <div className="flex gap-2">
                               <button
-                                onClick={() => handleUpdatePaymentAccount(pa.id, pa.name)}
+                                onClick={() =>
+                                  handleUpdatePaymentAccount(pa.id, pa.name)
+                                }
                                 className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-500"
                               >
                                 Save
@@ -827,7 +1036,12 @@ export default function SetupPage() {
                               <button
                                 onClick={() => {
                                   setEditingPayment(null);
-                                  setEditPaymentData({ name: "", type: "", accountNumber: "", balance: "" });
+                                  setEditPaymentData({
+                                    name: "",
+                                    type: "",
+                                    accountNumber: "",
+                                    balance: "",
+                                  });
                                 }}
                                 className="px-2 py-1 text-xs bg-zinc-600 text-white rounded hover:bg-zinc-500"
                               >
@@ -837,9 +1051,12 @@ export default function SetupPage() {
                           </div>
                         ) : (
                           <>
-                            <p className="font-bold text-zinc-900 dark:text-zinc-100">{pa.name}</p>
+                            <p className="font-bold text-zinc-900 dark:text-zinc-100">
+                              {pa.name}
+                            </p>
                             <p className="text-sm text-zinc-500">
-                              {pa.type} {pa.accountNumber && `| ${pa.accountNumber}`}
+                              {pa.type}{" "}
+                              {pa.accountNumber && `| ${pa.accountNumber}`}
                             </p>
                             <p className="text-sm font-semibold text-green-600 dark:text-green-400">
                               Balance: Rs. {(pa.balance || 0).toLocaleString()}
@@ -852,14 +1069,34 @@ export default function SetupPage() {
                           <button
                             onClick={() => {
                               setEditingPayment(pa.id);
-                              setEditPaymentData({ name: pa.name, type: pa.type, accountNumber: pa.accountNumber || "", balance: pa.balance?.toString() || "0" });
+                              setEditPaymentData({
+                                name: pa.name,
+                                type: pa.type,
+                                accountNumber: pa.accountNumber || "",
+                                balance: pa.balance?.toString() || "0",
+                              });
                             }}
                             className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                              <path d="m15 5 4 4" />
+                            </svg>
                           </button>
                           <button
-                            onClick={() => handleDeletePaymentAccount(pa.id, pa.name)}
+                            onClick={() =>
+                              handleDeletePaymentAccount(pa.id, pa.name)
+                            }
                             className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-colors"
                           >
                             <Trash2 size={16} />
@@ -874,6 +1111,12 @@ export default function SetupPage() {
           </div>
         )}
       </div>
+
+      <PaymentAccountLogsModal
+        isOpen={isLogsModalOpen}
+        onClose={() => setIsLogsModalOpen(false)}
+        accounts={paymentAccounts}
+      />
     </DashboardLayout>
   );
 }

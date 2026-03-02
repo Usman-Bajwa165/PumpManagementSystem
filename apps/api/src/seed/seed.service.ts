@@ -46,7 +46,7 @@ export class SeedService implements OnModuleInit {
 
       this.logger.log('Conditional seed finished.');
     } catch (err) {
-      this.logger.error('Seeding error', err as any);
+      this.logger.error('Seeding error', err);
     }
   }
 

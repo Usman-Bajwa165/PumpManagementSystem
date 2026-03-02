@@ -9,7 +9,15 @@ export class ExpensesService {
   constructor(private prisma: PrismaService) {}
 
   async create(createExpenseDto: CreateExpenseDto) {
-    const { title, amount, category, description, paymentMethod = 'CASH', paymentAccountId, date } = createExpenseDto;
+    const {
+      title,
+      amount,
+      category,
+      description,
+      paymentMethod = 'CASH',
+      paymentAccountId,
+      date,
+    } = createExpenseDto;
 
     // Determine credit account based on payment method
     let creditAccountCode = '10101'; // Default to Cash
@@ -17,7 +25,7 @@ export class ExpensesService {
       creditAccountCode = '10201'; // Bank Account
     }
 
-    let creditAccount = await this.prisma.account.findUnique({
+    const creditAccount = await this.prisma.account.findUnique({
       where: { code: creditAccountCode },
     });
 
@@ -55,7 +63,8 @@ export class ExpensesService {
           description: `Expense: ${title} (${paymentMethod})`,
           debitAccountId: expenseAccount.id,
           creditAccountId: creditAccount.id,
-          paymentAccountId: paymentMethod !== 'CASH' ? paymentAccountId : undefined,
+          paymentAccountId:
+            paymentMethod !== 'CASH' ? paymentAccountId : undefined,
         },
       });
 
@@ -86,7 +95,7 @@ export class ExpensesService {
 
   async findAll(startDate?: Date, endDate?: Date, category?: string) {
     const where: any = {};
-    
+
     if (startDate || endDate) {
       where.date = {};
       if (startDate) where.date.gte = startDate;
@@ -96,21 +105,21 @@ export class ExpensesService {
         where.date.lte = adjustedEnd;
       }
     }
-    
+
     if (category && category !== 'ALL') {
       where.category = category;
     }
-    
+
     return this.prisma.expenseRecord.findMany({
       where,
       orderBy: { date: 'desc' },
-      include: { 
-        transaction: { 
-          include: { 
+      include: {
+        transaction: {
+          include: {
             creditAccount: true,
-            paymentAccount: true 
-          } 
-        } 
+            paymentAccount: true,
+          },
+        },
       },
     });
   }
@@ -132,7 +141,9 @@ export class ExpensesService {
   async remove(id: string) {
     const expense = await this.prisma.expenseRecord.findUnique({
       where: { id },
-      include: { transaction: { include: { debitAccount: true, creditAccount: true } } },
+      include: {
+        transaction: { include: { debitAccount: true, creditAccount: true } },
+      },
     });
 
     if (!expense) {

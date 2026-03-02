@@ -29,7 +29,7 @@ export class IncomeService {
       debitAccountCode = '10201'; // Bank Account
     }
 
-    let debitAccount = await this.prisma.account.findUnique({
+    const debitAccount = await this.prisma.account.findUnique({
       where: { code: debitAccountCode },
     });
 
@@ -62,7 +62,7 @@ export class IncomeService {
       const transaction = await this.accountingService.createTransaction(
         {
           debitCode: debitAccountCode,
-          creditCode: incomeAccount!.code,
+          creditCode: incomeAccount.code,
           amount,
           description: `Income: ${title} (${paymentMethod})`,
           paymentAccountId:

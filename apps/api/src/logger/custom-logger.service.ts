@@ -20,14 +20,20 @@ export class CustomLogger implements LoggerService {
     return path.join(this.logsDir, `app-${date}.log`);
   }
 
-  private writeLog(level: string, message: string, context?: string, trace?: string, userId?: string) {
+  private writeLog(
+    level: string,
+    message: string,
+    context?: string,
+    trace?: string,
+    userId?: string,
+  ) {
     const timestamp = new Date().toISOString();
     const userInfo = userId ? ` [User: ${userId}]` : '';
     const contextInfo = context ? ` [${context}]` : '';
     const logMessage = `[${timestamp}] [${level}]${contextInfo}${userInfo} ${message}${trace ? `\n${trace}` : ''}\n`;
 
     fs.appendFileSync(this.getLogFileName(), logMessage);
-    
+
     // Also log to console
     const consoleMessage = `[${level}]${contextInfo}${userInfo} ${message}`;
     switch (level) {
@@ -68,18 +74,40 @@ export class CustomLogger implements LoggerService {
     this.writeLog(success ? 'INFO' : 'WARN', message, 'AuthService');
   }
 
-  logApiRequest(method: string, url: string, userId?: string, statusCode?: number) {
+  logApiRequest(
+    method: string,
+    url: string,
+    userId?: string,
+    statusCode?: number,
+  ) {
     const message = `${method} ${url} - Status: ${statusCode || 'pending'}`;
     this.writeLog('INFO', message, 'API', undefined, userId);
   }
 
-  logDatabaseOperation(operation: string, table: string, success: boolean, error?: string) {
+  logDatabaseOperation(
+    operation: string,
+    table: string,
+    success: boolean,
+    error?: string,
+  ) {
     const message = `DB ${operation} on ${table} - ${success ? 'SUCCESS' : 'FAILED'}${error ? `: ${error}` : ''}`;
     this.writeLog(success ? 'INFO' : 'ERROR', message, 'Database', error);
   }
 
-  logBusinessOperation(operation: string, details: string, userId?: string, success: boolean = true, error?: string) {
+  logBusinessOperation(
+    operation: string,
+    details: string,
+    userId?: string,
+    success: boolean = true,
+    error?: string,
+  ) {
     const message = `${operation}: ${details} - ${success ? 'SUCCESS' : 'FAILED'}${error ? `: ${error}` : ''}`;
-    this.writeLog(success ? 'INFO' : 'ERROR', message, 'Business', error, userId);
+    this.writeLog(
+      success ? 'INFO' : 'ERROR',
+      message,
+      'Business',
+      error,
+      userId,
+    );
   }
 }

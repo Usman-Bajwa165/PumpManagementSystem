@@ -103,9 +103,12 @@ export class InventoryService {
       });
 
       // 3. Handle Payment (if any)
-      const paidAmount = 
-        dto.paymentStatus === 'PAID' ? dto.cost : 
-        dto.paymentStatus === 'PARTIAL' ? (dto.paidAmount || 0) : 0;
+      const paidAmount =
+        dto.paymentStatus === 'PAID'
+          ? dto.cost
+          : dto.paymentStatus === 'PARTIAL'
+            ? dto.paidAmount || 0
+            : 0;
 
       if (paidAmount > 0) {
         const method = dto.paymentMethod || 'CASH';

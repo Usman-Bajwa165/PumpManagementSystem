@@ -730,20 +730,22 @@ export default function ReportsPage() {
               <Calendar size={16} className="text-zinc-500" />
               <input
                 type="date"
-                className="bg-transparent text-xs text-zinc-300 outline-none w-28"
+                className="bg-transparent text-xs text-zinc-300 outline-none w-28 cursor-pointer"
                 value={dateRange.start}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, start: e.target.value }))
                 }
+                onClick={(e) => e.currentTarget.showPicker?.()}
               />
               <span className="text-zinc-700 font-bold">to</span>
               <input
                 type="date"
-                className="bg-transparent text-xs text-zinc-300 outline-none w-28"
+                className="bg-transparent text-xs text-zinc-300 outline-none w-28 cursor-pointer"
                 value={dateRange.end}
                 onChange={(e) =>
                   setDateRange((prev) => ({ ...prev, end: e.target.value }))
                 }
+                onClick={(e) => e.currentTarget.showPicker?.()}
               />
             </div>
 

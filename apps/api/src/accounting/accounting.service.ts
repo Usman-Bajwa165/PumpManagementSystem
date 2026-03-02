@@ -135,7 +135,11 @@ export class AccountingService implements OnModuleInit {
 
     // If payment account is involved, update its balance
     if (data.paymentAccountId) {
-      await this.updatePaymentAccountBalance(data.paymentAccountId, data.amount, debitAcc.code);
+      await this.updatePaymentAccountBalance(
+        data.paymentAccountId,
+        data.amount,
+        debitAcc.code,
+      );
     }
 
     return tx;
@@ -478,7 +482,7 @@ export class AccountingService implements OnModuleInit {
 
   private async syncPaymentAccountsWithBank() {
     const paymentAccounts = await this.prisma.paymentAccount.findMany();
-    
+
     const totalPaymentBalance = paymentAccounts.reduce(
       (sum, pa) => sum + Number(pa.balance || 0),
       0,

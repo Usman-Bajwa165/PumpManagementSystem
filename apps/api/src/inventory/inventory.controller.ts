@@ -78,7 +78,10 @@ export class InventoryController {
 
   @Roles(Role.MANAGER, Role.ADMIN)
   @Patch('products/:id')
-  updateProduct(@Param('id') id: string, @Body() dto: { sellingPrice?: number; purchasePrice?: number }) {
+  updateProduct(
+    @Param('id') id: string,
+    @Body() dto: { sellingPrice?: number; purchasePrice?: number },
+  ) {
     return this.inventoryService.updateProduct(id, dto);
   }
 

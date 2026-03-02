@@ -190,9 +190,9 @@ export class SuppliersService {
   remove(id: string) {
     return this.prisma.supplier.update({
       where: { id },
-      data: { 
+      data: {
         isDeleted: true,
-        deletedAt: new Date()
+        deletedAt: new Date(),
       },
     });
   }

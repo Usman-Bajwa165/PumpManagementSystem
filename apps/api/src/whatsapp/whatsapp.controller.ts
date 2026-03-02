@@ -33,16 +33,16 @@ export class WhatsappController {
   async savePreferences(@Body() data: any) {
     const phoneNumber = data.phoneNumber || '923000000000';
     const existing = await this.prisma.notificationPreferences.findFirst();
-    
+
     if (existing) {
       return this.prisma.notificationPreferences.update({
         where: { id: existing.id },
         data: { ...data, phoneNumber },
       });
     }
-    
-    return this.prisma.notificationPreferences.create({ 
-      data: { ...data, phoneNumber } 
+
+    return this.prisma.notificationPreferences.create({
+      data: { ...data, phoneNumber },
     });
   }
 
