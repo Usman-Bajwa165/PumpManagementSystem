@@ -81,7 +81,7 @@ export default function ReportsPage() {
 
   const formatDateTime = (date: any) => {
     if (!date) return "---";
-    return `${formatDate(date)} ${formatTime(date)}`;
+    return `${formatDate(date)}, ${formatTime(date)}`;
   };
 
   const formatShiftName = (shift: any) => {
@@ -90,6 +90,65 @@ export default function ReportsPage() {
     const hours = date.getHours();
     const period = hours < 12 ? "M" : "N";
     return `${formatDate(date)} ${period}`;
+  };
+
+  const formatAccountLabel = (account: any) => {
+    if (!account) return "Unknown Account";
+    return `${account.name}${account.code ? ` (${account.code})` : ""}`;
+  };
+
+  const refineDescription = (description: string, tx: any) => {
+    if (!description) return "---";
+    let refined = description;
+
+    // Replace Payment Account ID if present
+    if (tx.paymentAccountId && tx.paymentAccount) {
+      const accountLabel = tx.paymentAccount.accountNumber
+        ? `${tx.paymentAccount.name} - ${tx.paymentAccount.accountNumber}`
+        : tx.paymentAccount.name;
+
+      // Find and replace the specific [Account: ID] pattern first
+      const accountPattern = new RegExp(
+        `\\[Account: ${tx.paymentAccountId}\\]`,
+        "g",
+      );
+      if (accountPattern.test(refined)) {
+        refined = refined.replace(accountPattern, `(${accountLabel})`);
+      } else {
+        refined = refined.replace(tx.paymentAccountId, accountLabel);
+      }
+    }
+
+    // Replace Debit Account ID if present
+    if (tx.debitAccountId && tx.debitAccount) {
+      const accountLabel = tx.debitAccount.code
+        ? `${tx.debitAccount.name} - ${tx.debitAccount.code}`
+        : tx.debitAccount.name;
+      refined = refined.replace(
+        new RegExp(`\\[Account: ${tx.debitAccountId}\\]`, "g"),
+        `(${accountLabel})`,
+      );
+      refined = refined.replace(tx.debitAccountId, accountLabel);
+    }
+
+    // Replace Credit Account ID if present
+    if (tx.creditAccountId && tx.creditAccount) {
+      const accountLabel = tx.creditAccount.code
+        ? `${tx.creditAccount.name} - ${tx.creditAccount.code}`
+        : tx.creditAccount.name;
+      refined = refined.replace(
+        new RegExp(`\\[Account: ${tx.creditAccountId}\\]`, "g"),
+        `(${accountLabel})`,
+      );
+      refined = refined.replace(tx.creditAccountId, accountLabel);
+    }
+
+    // Replace Shift ID if present
+    if (tx.shiftId && tx.shift) {
+      refined = refined.replace(tx.shiftId, formatShiftName(tx.shift));
+    }
+
+    return refined;
   };
 
   // Sales Specific States
@@ -138,6 +197,9 @@ export default function ReportsPage() {
   );
   const [financePaymentAccountId, setFinancePaymentAccountId] = useState(
     searchParams.get("financePaymentAccountId") || "",
+  );
+  const [selectedAccountId, setSelectedAccountId] = useState(
+    searchParams.get("accountId") || "",
   );
 
   // Daily Activity Tracking (Reminders/Invoices)
@@ -225,9 +287,13 @@ export default function ReportsPage() {
       params.set("paymentStatus", purchasePaymentStatus);
       if (purchaseProductId) params.set("purchaseProductId", purchaseProductId);
     } else if (reportType === "LEDGER") {
-      params.set("ledgerType", ledgerType);
-      if (selectedEntityId) params.set("entityId", selectedEntityId);
-      params.set("showLogs", showLogs.toString());
+      if (selectedAccountId) {
+        params.set("accountId", selectedAccountId);
+      } else {
+        params.set("ledgerType", ledgerType);
+        if (selectedEntityId) params.set("entityId", selectedEntityId);
+        params.set("showLogs", showLogs.toString());
+      }
     } else if (reportType === "INCOME") {
       params.set("financeMode", financeMode);
       if (financeAccountId) params.set("financeAccountId", financeAccountId);
@@ -254,6 +320,7 @@ export default function ReportsPage() {
     financeMode,
     financeAccountId,
     financePaymentAccountId,
+    selectedAccountId,
     router,
   ]);
 
@@ -302,19 +369,23 @@ export default function ReportsPage() {
             params.paymentAccountId = financePaymentAccountId;
           break;
         case "LEDGER":
-          if (!selectedEntityId) {
+          if (selectedAccountId) {
+            endpoint = `/reports/ledger/${selectedAccountId}`;
+            setShowLogs(true);
+          } else if (selectedEntityId) {
+            endpoint =
+              ledgerType === "SUPPLIER"
+                ? `/reports/ledger/supplier/${selectedEntityId}`
+                : `/reports/ledger/customer/${selectedEntityId}`;
+            if (selectedEntityId === "ALL") {
+              setShowLogs(false);
+            } else {
+              setShowLogs(true);
+            }
+          } else {
             setData(null);
             setIsLoading(false);
             return;
-          }
-          endpoint =
-            ledgerType === "SUPPLIER"
-              ? `/reports/ledger/supplier/${selectedEntityId}`
-              : `/reports/ledger/customer/${selectedEntityId}`;
-          if (selectedEntityId === "ALL") {
-            setShowLogs(false);
-          } else {
-            setShowLogs(true);
           }
           break;
       }
@@ -400,6 +471,7 @@ export default function ReportsPage() {
     financeMode,
     financeAccountId,
     financePaymentAccountId,
+    selectedAccountId,
     fetchReport,
   ]);
 
@@ -631,6 +703,10 @@ export default function ReportsPage() {
               key={tab.id}
               onClick={() => {
                 setReportType(tab.id);
+                if (tab.id === "LEDGER") {
+                  setSelectedAccountId("");
+                  setSelectedEntityId("ALL");
+                }
                 // Don't clear data immediately to allow smoother transition
               }}
               className={cn(
@@ -1493,59 +1569,172 @@ export default function ReportsPage() {
             {/* Ledger */}
             {reportType === "LEDGER" && (
               <div className="space-y-6">
-                {selectedEntityId === "ALL" && data?.summary && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div className="p-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/5">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 bg-emerald-500/20 rounded-2xl text-emerald-500">
-                          <TrendingDown size={24} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wider text-emerald-500/70">
-                            {ledgerType === "CUSTOMER"
-                              ? "Total Receivable"
-                              : "Total Payable"}
-                          </p>
-                          <p className="text-3xl font-black text-emerald-500 font-mono italic">
-                            Rs.{" "}
-                            {data.summary
-                              .reduce(
-                                (sum: number, item: any) => sum + item.balance,
-                                0,
-                              )
-                              .toLocaleString()}
-                          </p>
-                        </div>
+                {selectedAccountId && data?.transactions && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={() => {
+                            setSelectedAccountId("");
+                            setReportType("TRIAL");
+                          }}
+                          className="px-4 py-2 rounded-xl text-xs font-bold transition-all bg-zinc-900 text-zinc-500 hover:text-zinc-300"
+                        >
+                          ← Back to Trial Balance
+                        </button>
                       </div>
-                      <p className="text-xs text-zinc-500">
-                        {ledgerType === "CUSTOMER"
-                          ? "Amount to be received from customers"
-                          : "Amount to be paid to suppliers"}
-                      </p>
+
+                      <div className="flex flex-col items-end">
+                        <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tight">
+                          {formatAccountLabel(data.account)}
+                        </h3>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest text-right">
+                          Detailed General Ledger
+                        </p>
+                      </div>
                     </div>
-                    <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/40">
-                      <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 bg-zinc-800 rounded-2xl text-zinc-400">
-                          <BookOpen size={24} />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
-                            Total{" "}
-                            {ledgerType === "CUSTOMER"
-                              ? "Customers"
-                              : "Suppliers"}
-                          </p>
-                          <p className="text-3xl font-black text-zinc-100 font-mono italic">
-                            {data.summary.length}
-                          </p>
-                        </div>
+
+                    <div className="overflow-hidden rounded-[32px] border border-zinc-800 bg-zinc-950/50 backdrop-blur-sm">
+                      <div className="max-h-[600px] overflow-auto custom-scrollbar">
+                        <table className="w-full text-left text-sm text-zinc-400 border-collapse">
+                          <thead className="sticky top-0 z-10 bg-zinc-900/95 backdrop-blur-sm uppercase font-black text-[10px] text-zinc-500 tracking-widest border-b border-zinc-800">
+                            <tr>
+                              <th className="px-6 py-5">Date</th>
+                              <th className="px-6 py-5">Description</th>
+                              <th className="px-6 py-5 text-right text-rose-500">
+                                Debit (DR)
+                              </th>
+                              <th className="px-6 py-5 text-right text-emerald-500">
+                                Credit (CR)
+                              </th>
+                              <th className="px-6 py-5 text-right text-zinc-100">
+                                Running Balance
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-900">
+                            {(() => {
+                              let runningBalance = 0;
+                              const accountType = data.account?.type;
+                              // ASSET and EXPENSE increase with DEBIT
+                              // LIABILITY, EQUITY, INCOME increase with CREDIT
+                              const isDebitNormal =
+                                accountType === "ASSET" ||
+                                accountType === "EXPENSE";
+
+                              return (data.transactions || []).map(
+                                (tx: any, i: number) => {
+                                  const isDebit =
+                                    tx.debitAccountId === selectedAccountId;
+                                  const amount = Number(tx.amount);
+
+                                  if (isDebitNormal) {
+                                    if (isDebit) runningBalance += amount;
+                                    else runningBalance -= amount;
+                                  } else {
+                                    if (isDebit) runningBalance -= amount;
+                                    else runningBalance += amount;
+                                  }
+
+                                  return (
+                                    <tr
+                                      key={i}
+                                      className="hover:bg-zinc-100/2 transition-colors"
+                                    >
+                                      <td className="px-6 py-5 font-mono text-zinc-300 text-xs text-center">
+                                        {formatDateTime(tx.createdAt)}
+                                      </td>
+                                      <td className="px-6 py-5 font-bold text-zinc-100 italic">
+                                        {refineDescription(tx.description, tx)}
+                                      </td>
+                                      <td className="px-6 py-5 text-right font-mono text-rose-400/80">
+                                        {isDebit
+                                          ? amount.toLocaleString()
+                                          : "-"}
+                                      </td>
+                                      <td className="px-6 py-5 text-right font-mono text-emerald-400/80">
+                                        {!isDebit
+                                          ? amount.toLocaleString()
+                                          : "-"}
+                                      </td>
+                                      <td className="px-6 py-5 text-right font-black text-zinc-100 font-mono italic">
+                                        Rs. {runningBalance.toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  );
+                                },
+                              );
+                            })()}
+                          </tbody>
+                        </table>
+                        {(!data.transactions ||
+                          data.transactions.length === 0) && (
+                          <div className="py-20 text-center text-zinc-600">
+                            <p className="text-lg font-bold mb-2">
+                              No transactions found for this account
+                            </p>
+                          </div>
+                        )}
                       </div>
-                      <p className="text-xs text-zinc-500">
-                        Active accounts with outstanding balance
-                      </p>
                     </div>
                   </div>
                 )}
+                {!selectedAccountId &&
+                  selectedEntityId === "ALL" &&
+                  data?.summary && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      <div className="p-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/5">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="p-3 bg-emerald-500/20 rounded-2xl text-emerald-500">
+                            <TrendingDown size={24} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-emerald-500/70">
+                              {ledgerType === "CUSTOMER"
+                                ? "Total Receivable"
+                                : "Total Payable"}
+                            </p>
+                            <p className="text-3xl font-black text-emerald-500 font-mono italic">
+                              Rs.{" "}
+                              {data.summary
+                                .reduce(
+                                  (sum: number, item: any) =>
+                                    sum + item.balance,
+                                  0,
+                                )
+                                .toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          {ledgerType === "CUSTOMER"
+                            ? "Amount to be received from customers"
+                            : "Amount to be paid to suppliers"}
+                        </p>
+                      </div>
+                      <div className="p-8 rounded-3xl border border-zinc-800 bg-zinc-900/40">
+                        <div className="flex items-center gap-3 mb-4">
+                          <div className="p-3 bg-zinc-800 rounded-2xl text-zinc-400">
+                            <BookOpen size={24} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-zinc-500">
+                              Total{" "}
+                              {ledgerType === "CUSTOMER"
+                                ? "Customers"
+                                : "Suppliers"}
+                            </p>
+                            <p className="text-3xl font-black text-zinc-100 font-mono italic">
+                              {data.summary.length}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          Active accounts with outstanding balance
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 {selectedEntityId === "ALL" && (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -2224,18 +2413,17 @@ export default function ReportsPage() {
                                   {accountsArray.map((acc: any) => (
                                     <tr
                                       key={acc.code}
-                                      onClick={() =>
-                                        router.push(
-                                          `/reports?reportType=LEDGER&accountId=${acc.id}`,
-                                        )
-                                      }
+                                      onClick={() => {
+                                        setSelectedAccountId(acc.id);
+                                        setReportType("LEDGER");
+                                      }}
                                       className="group hover:bg-zinc-100/3 transition-all cursor-pointer"
                                     >
                                       <td className="px-6 py-4 font-mono text-zinc-500 font-bold tracking-tighter">
                                         {acc.code}
                                       </td>
                                       <td className="px-6 py-4 text-zinc-100 font-bold">
-                                        {acc.name}
+                                        {formatAccountLabel(acc)}
                                       </td>
                                       <td className="px-6 py-4 text-right font-mono text-zinc-100 text-base">
                                         {acc.debit > 0 ? (

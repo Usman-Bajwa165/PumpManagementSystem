@@ -61,6 +61,8 @@ export class ReportsService {
       include: {
         debitAccount: true,
         creditAccount: true,
+        shift: true,
+        paymentAccount: true,
       },
     });
 
@@ -342,9 +344,9 @@ export class ReportsService {
         date: t.createdAt,
         description,
         amount: Number(t.amount),
-        account: t.creditAccount.name,
+        account: `${t.creditAccount.name}${t.creditAccount.code ? ` (${t.creditAccount.code})` : ''}`,
         paymentInfo,
-        paidVia: t.debitAccount.name,
+        paidVia: `${t.debitAccount.name}${t.debitAccount.code ? ` (${t.debitAccount.code})` : ''}`,
         createdBy: t.createdBy?.username || 'Unknown',
       };
     });
@@ -417,9 +419,9 @@ export class ReportsService {
         date: t.createdAt,
         description,
         amount: Number(t.amount),
-        account: t.debitAccount.name,
+        account: `${t.debitAccount.name}${t.debitAccount.code ? ` (${t.debitAccount.code})` : ''}`,
         paymentInfo,
-        paidVia: t.creditAccount.name,
+        paidVia: `${t.creditAccount.name}${t.creditAccount.code ? ` (${t.creditAccount.code})` : ''}`,
         createdBy: t.createdBy?.username || 'Unknown',
       };
     });
@@ -1310,18 +1312,23 @@ export class ReportsService {
       });
 
       // Calculate NET balances: debits - credits for each account
-      const accountBalances = new Map<string, { debits: number; credits: number }>();
-      accounts.forEach((a) => accountBalances.set(a.id, { debits: 0, credits: 0 }));
+      const accountBalances = new Map<
+        string,
+        { debits: number; credits: number }
+      >();
+      accounts.forEach((a) =>
+        accountBalances.set(a.id, { debits: 0, credits: 0 }),
+      );
 
       transactions.forEach((tx) => {
         const amount = Number(tx.amount);
-        
+
         // Debit side
         const debitBal = accountBalances.get(tx.debitAccountId);
         if (debitBal) {
           debitBal.debits += amount;
         }
-        
+
         // Credit side
         const creditBal = accountBalances.get(tx.creditAccountId);
         if (creditBal) {
