@@ -311,3 +311,13 @@ model Transaction {
   description     String?
   createdAt       DateTime @default(now())
 }
+
+model ShiftSchedule {
+  id        String   @id @default(uuid())
+  dayOfWeek Int      // 0=Sun, 1=Mon, ..., 6=Sat
+  startTime String   // "HH:mm"
+  endTime   String   // "HH:mm"
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

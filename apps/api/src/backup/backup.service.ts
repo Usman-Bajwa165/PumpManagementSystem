@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomLogger } from '../logger/custom-logger.service';
@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import PDFDocument from 'pdfkit';
 
 @Injectable()
-export class BackupService {
+export class BackupService implements OnModuleInit {
   private backupDir: string;
 
   constructor(
@@ -41,6 +41,100 @@ export class BackupService {
     if (!fs.existsSync(this.backupDir)) {
       fs.mkdirSync(this.backupDir, { recursive: true });
       this.logger.log(`Backup directory created: ${this.backupDir}`);
+    }
+  }
+
+  async onModuleInit() {
+    // Wait for a short period to ensure all other services are fully initialized
+    setTimeout(() => {
+      this.checkAndRunMissedBackups().catch((err) => {
+        this.logger.error(
+          'Missed backup check failed',
+          err.message,
+          'BackupService',
+        );
+      });
+    }, 10000);
+  }
+
+  async checkAndRunMissedBackups() {
+    try {
+      this.logger.log('Checking for missed backups...', 'BackupService');
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      if (!prefs) return;
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Karachi',
+      });
+
+      const nightTime = prefs.autoBackupNightTime || '00:00';
+      const dayTime = prefs.autoBackupDayTime || '12:00';
+
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = String(now.getFullYear()).slice(-2);
+
+      // Check Night Backup
+      if (timeString >= nightTime) {
+        const filename = `Auto_${day}${month}${year}_N.pdf`;
+        if (!fs.existsSync(path.join(this.backupDir, filename))) {
+          this.logger.log(
+            `Missed night backup detected. Running now: ${filename}`,
+            'BackupService',
+          );
+          await this.performBackup('N');
+        }
+      }
+
+      // Check Day Backup
+      if (timeString >= dayTime) {
+        const filename = `Auto_${day}${month}${year}_D.pdf`;
+        if (!fs.existsSync(path.join(this.backupDir, filename))) {
+          this.logger.log(
+            `Missed day backup detected. Running now: ${filename}`,
+            'BackupService',
+          );
+          await this.performBackup('D');
+        }
+      }
+
+      // Check Monthly Full Backup
+      const monthNames = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
+      const monthName = monthNames[now.getMonth()];
+      const yearLong = now.getFullYear();
+      const monthlyFilename = `Full_Auto_${monthName}-${yearLong}.pdf`;
+
+      if (!fs.existsSync(path.join(this.backupDir, monthlyFilename))) {
+        this.logger.log(
+          `Missed monthly full backup detected for ${monthName}. Running now.`,
+          'BackupService',
+        );
+        await this.performMonthlyFullBackup();
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Missed backup check failed`,
+        errorMsg,
+        'BackupService',
+      );
     }
   }
 
@@ -278,7 +372,10 @@ export class BackupService {
         });
 
         stream.on('finish', () => {
-          this.logger.log(`PDF written successfully: ${filePath}`, 'BackupService');
+          this.logger.log(
+            `PDF written successfully: ${filePath}`,
+            'BackupService',
+          );
           resolve();
         });
 
@@ -302,11 +399,20 @@ export class BackupService {
 
         // Header
         doc.rect(0, 0, doc.page.width, 100).fill('#1e40af');
-        doc.fontSize(24).fillColor('#ffffff').font('Helvetica-Bold')
+        doc
+          .fontSize(24)
+          .fillColor('#ffffff')
+          .font('Helvetica-Bold')
           .text('PETROL PUMP MANAGEMENT', 40, 30, { align: 'center' });
-        doc.fontSize(14).fillColor('#93c5fd')
-          .text(isFull ? 'COMPLETE DATABASE BACKUP' : 'INCREMENTAL BACKUP', { align: 'center' });
-        doc.fontSize(9).fillColor('#e0e7ff')
+        doc
+          .fontSize(14)
+          .fillColor('#93c5fd')
+          .text(isFull ? 'COMPLETE DATABASE BACKUP' : 'INCREMENTAL BACKUP', {
+            align: 'center',
+          });
+        doc
+          .fontSize(9)
+          .fillColor('#e0e7ff')
           .text(`Generated: ${formattedDate}`, 40, 75, { align: 'right' });
         if (sinceDate) {
           const formattedSince = sinceDate.toLocaleString('en-GB', {
@@ -325,19 +431,27 @@ export class BackupService {
         // Users
         const users = await this.prisma.user.findMany();
         this.addSectionHeader(doc, 'SYSTEM USERS', '#10b981');
-        this.addTable(doc, ['#', 'Username', 'Role', 'Status'], users.map((u, i) => [
-          (i + 1).toString(),
-          u.username,
-          u.role,
-          'Active'
-        ]));
+        this.addTable(
+          doc,
+          ['#', 'Username', 'Role', 'Status'],
+          users.map((u, i) => [
+            (i + 1).toString(),
+            u.username,
+            u.role,
+            'Active',
+          ]),
+        );
         doc.moveDown();
 
         // Shifts
         const shiftsWhere = sinceDate ? { startTime: { gte: sinceDate } } : {};
         const shifts = await this.prisma.shift.findMany({
           where: shiftsWhere,
-          include: { opener: true, closer: true, readings: { include: { nozzle: true } } },
+          include: {
+            opener: true,
+            closer: true,
+            readings: { include: { nozzle: true } },
+          },
           orderBy: { startTime: 'desc' },
           take: isFull ? undefined : 50,
         });
@@ -350,47 +464,77 @@ export class BackupService {
             minute: '2-digit',
             hour12: true,
           });
-          const endTime = shift.endTime ? new Date(shift.endTime).toLocaleString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true,
-          }) : 'Ongoing';
-          doc.fontSize(10).fillColor('#000').font('Helvetica-Bold')
-            .text(`Shift: ${shift.status} | Opened: ${startTime} | Closed: ${endTime}`, 50);
-          doc.fontSize(9).font('Helvetica')
-            .text(`Operator: ${shift.opener.username}${shift.closer ? ` | Closer: ${shift.closer.username}` : ''}`, 50);
+          const endTime = shift.endTime
+            ? new Date(shift.endTime).toLocaleString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true,
+              })
+            : 'Ongoing';
+          doc
+            .fontSize(10)
+            .fillColor('#000')
+            .font('Helvetica-Bold')
+            .text(
+              `Shift: ${shift.status} | Opened: ${startTime} | Closed: ${endTime}`,
+              50,
+            );
+          doc
+            .fontSize(9)
+            .font('Helvetica')
+            .text(
+              `Operator: ${shift.opener.username}${shift.closer ? ` | Closer: ${shift.closer.username}` : ''}`,
+              50,
+            );
 
           if (shift.readings.length > 0) {
-            const readingsData = shift.readings.map(r => [
+            const readingsData = shift.readings.map((r) => [
               r.nozzle.name,
               Number(r.openingReading).toFixed(2),
               r.closingReading ? Number(r.closingReading).toFixed(2) : '-',
-              r.closingReading ? (Number(r.closingReading) - Number(r.openingReading)).toFixed(2) : '-'
+              r.closingReading
+                ? (Number(r.closingReading) - Number(r.openingReading)).toFixed(
+                    2,
+                  )
+                : '-',
             ]);
-            this.addTable(doc, ['Nozzle', 'Opening', 'Closing', 'Sold (L)'], readingsData, 60);
+            this.addTable(
+              doc,
+              ['Nozzle', 'Opening', 'Closing', 'Sold (L)'],
+              readingsData,
+              60,
+            );
           }
           doc.moveDown(0.5);
         }
         doc.moveDown();
 
         // Inventory
-        const tanks = await this.prisma.tank.findMany({ include: { product: true, nozzles: true } });
+        const tanks = await this.prisma.tank.findMany({
+          include: { product: true, nozzles: true },
+        });
         this.addSectionHeader(doc, 'INVENTORY STATUS', '#8b5cf6');
-        const tankData = tanks.map(t => [
+        const tankData = tanks.map((t) => [
           t.name,
           t.product.name,
           `${Number(t.currentStock).toFixed(2)} L`,
           `${Number(t.capacity).toFixed(2)} L`,
           `${((Number(t.currentStock) / Number(t.capacity)) * 100).toFixed(1)}%`,
-          t.nozzles.length.toString()
+          t.nozzles.length.toString(),
         ]);
-        this.addTable(doc, ['Tank', 'Product', 'Stock', 'Capacity', 'Fill %', 'Nozzles'], tankData);
+        this.addTable(
+          doc,
+          ['Tank', 'Product', 'Stock', 'Capacity', 'Fill %', 'Nozzles'],
+          tankData,
+        );
         doc.moveDown();
 
         // Sales Summary
-        const transactionsWhere = sinceDate ? { createdAt: { gte: sinceDate } } : {};
+        const transactionsWhere = sinceDate
+          ? { createdAt: { gte: sinceDate } }
+          : {};
         const salesTxs = await this.prisma.transaction.findMany({
           where: { ...transactionsWhere, product: { isNot: null } },
           include: { product: true, nozzle: true },
@@ -398,53 +542,81 @@ export class BackupService {
 
         if (salesTxs.length > 0) {
           this.addSectionHeader(doc, 'SALES SUMMARY', '#ef4444');
-          const salesByProduct = salesTxs.reduce((acc, tx) => {
-            const pName = tx.product?.name || 'Unknown';
-            if (!acc[pName]) acc[pName] = { qty: 0, amount: 0, count: 0 };
-            acc[pName].qty += Number(tx.quantity || 0);
-            acc[pName].amount += Number(tx.amount);
-            acc[pName].count += 1;
-            return acc;
-          }, {} as Record<string, { qty: number; amount: number; count: number }>);
+          const salesByProduct = salesTxs.reduce(
+            (acc, tx) => {
+              const pName = tx.product?.name || 'Unknown';
+              if (!acc[pName]) acc[pName] = { qty: 0, amount: 0, count: 0 };
+              acc[pName].qty += Number(tx.quantity || 0);
+              acc[pName].amount += Number(tx.amount);
+              acc[pName].count += 1;
+              return acc;
+            },
+            {} as Record<
+              string,
+              { qty: number; amount: number; count: number }
+            >,
+          );
 
-          const salesData = Object.entries(salesByProduct).map(([product, data]) => [
-            product,
-            data.count.toString(),
-            `${data.qty.toFixed(2)} L`,
-            `Rs. ${data.amount.toLocaleString()}`
-          ]);
-          this.addTable(doc, ['Product', 'Transactions', 'Quantity', 'Revenue'], salesData);
+          const salesData = Object.entries(salesByProduct).map(
+            ([product, data]) => [
+              product,
+              data.count.toString(),
+              `${data.qty.toFixed(2)} L`,
+              `Rs. ${data.amount.toLocaleString()}`,
+            ],
+          );
+          this.addTable(
+            doc,
+            ['Product', 'Transactions', 'Quantity', 'Revenue'],
+            salesData,
+          );
 
-          const totalRevenue = Object.values(salesByProduct).reduce((sum, d) => sum + d.amount, 0);
-          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000')
+          const totalRevenue = Object.values(salesByProduct).reduce(
+            (sum, d) => sum + d.amount,
+            0,
+          );
+          doc
+            .fontSize(10)
+            .font('Helvetica-Bold')
+            .fillColor('#000')
             .text(`Total Revenue: Rs. ${totalRevenue.toLocaleString()}`, 50);
           doc.moveDown();
         }
 
         // Accounts
-        const accounts = await this.prisma.account.findMany({ orderBy: { code: 'asc' } });
+        const accounts = await this.prisma.account.findMany({
+          orderBy: { code: 'asc' },
+        });
         this.addSectionHeader(doc, 'FINANCIAL ACCOUNTS', '#06b6d4');
-        const accountData = accounts.map(a => [
+        const accountData = accounts.map((a) => [
           a.code,
           a.name,
           a.type,
-          `Rs. ${Number(a.balance).toLocaleString()}`
+          `Rs. ${Number(a.balance).toLocaleString()}`,
         ]);
-        this.addTable(doc, ['Code', 'Account Name', 'Type', 'Balance'], accountData);
+        this.addTable(
+          doc,
+          ['Code', 'Account Name', 'Type', 'Balance'],
+          accountData,
+        );
         doc.moveDown();
 
         // Nozzle Readings
         const nozzles = await this.prisma.nozzle.findMany({
-          include: { tank: { include: { product: true } } }
+          include: { tank: { include: { product: true } } },
         });
         this.addSectionHeader(doc, 'NOZZLE READINGS', '#ec4899');
-        const nozzleData = nozzles.map(n => [
+        const nozzleData = nozzles.map((n) => [
           n.name,
           n.tank.product.name,
           n.tank.name,
-          `${Number(n.lastReading).toFixed(2)} L`
+          `${Number(n.lastReading).toFixed(2)} L`,
         ]);
-        this.addTable(doc, ['Nozzle', 'Product', 'Tank', 'Last Reading'], nozzleData);
+        this.addTable(
+          doc,
+          ['Nozzle', 'Product', 'Tank', 'Last Reading'],
+          nozzleData,
+        );
         doc.moveDown();
 
         // Transactions
@@ -464,23 +636,45 @@ export class BackupService {
             minute: '2-digit',
             hour12: true,
           });
-          doc.fontSize(8).fillColor('#000').font('Helvetica')
-            .text(`${txDate} | Rs. ${Number(tx.amount).toLocaleString()} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name}`, 50);
+          doc
+            .fontSize(8)
+            .fillColor('#000')
+            .font('Helvetica')
+            .text(
+              `${txDate} | Rs. ${Number(tx.amount).toLocaleString()} | Dr: ${tx.debitAccount.name} | Cr: ${tx.creditAccount.name}`,
+              50,
+            );
           if (tx.description) {
             doc.fontSize(7).fillColor('#666').text(`  ${tx.description}`, 50);
           }
-          if (i % 50 === 0 && i > 0 && i < transactions.length - 1) doc.addPage();
+          if (i % 50 === 0 && i > 0 && i < transactions.length - 1)
+            doc.addPage();
         }
 
         // Footer
         const bottom = doc.page.height - 50;
-        doc.fontSize(8).fillColor('#94a3b8')
-          .text('PETROL PUMP MANAGEMENT SYSTEM | SECURE DATABASE BACKUP', 40, bottom, { align: 'center' });
-        doc.fontSize(7).text('© 2026 PPMS | Electronically Generated Document', { align: 'center' });
+        doc
+          .fontSize(8)
+          .fillColor('#94a3b8')
+          .text(
+            'PETROL PUMP MANAGEMENT SYSTEM | SECURE DATABASE BACKUP',
+            40,
+            bottom,
+            { align: 'center' },
+          );
+        doc
+          .fontSize(7)
+          .text('© 2026 PPMS | Electronically Generated Document', {
+            align: 'center',
+          });
 
         doc.end();
       } catch (error) {
-        this.logger.error('PDF generation error', error instanceof Error ? error.message : 'Unknown', 'BackupService');
+        this.logger.error(
+          'PDF generation error',
+          error instanceof Error ? error.message : 'Unknown',
+          'BackupService',
+        );
         reject(error);
       }
     });
@@ -506,25 +700,45 @@ export class BackupService {
     }
   }
 
-  private addSectionHeader(doc: PDFKit.PDFDocument, title: string, color: string) {
-    doc.fontSize(12).font('Helvetica-Bold').fillColor(color)
-      .text(title, 40);
-    doc.moveTo(40, doc.y + 5).lineTo(doc.page.width - 40, doc.y + 5)
-      .strokeColor(color).lineWidth(2).stroke();
+  private addSectionHeader(
+    doc: PDFKit.PDFDocument,
+    title: string,
+    color: string,
+  ) {
+    doc.fontSize(12).font('Helvetica-Bold').fillColor(color).text(title, 40);
+    doc
+      .moveTo(40, doc.y + 5)
+      .lineTo(doc.page.width - 40, doc.y + 5)
+      .strokeColor(color)
+      .lineWidth(2)
+      .stroke();
     doc.moveDown(0.8);
   }
 
-  private addTable(doc: PDFKit.PDFDocument, headers: string[], rows: string[][], indent = 50) {
+  private addTable(
+    doc: PDFKit.PDFDocument,
+    headers: string[],
+    rows: string[][],
+    indent = 50,
+  ) {
     const colWidth = (doc.page.width - indent * 2) / headers.length;
     let y = doc.y;
 
     // Headers
     doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e293b');
     headers.forEach((h, i) => {
-      doc.text(h, indent + i * colWidth, y, { width: colWidth - 5, align: 'left' });
+      doc.text(h, indent + i * colWidth, y, {
+        width: colWidth - 5,
+        align: 'left',
+      });
     });
     y += 15;
-    doc.moveTo(indent, y).lineTo(doc.page.width - indent, y).strokeColor('#cbd5e1').lineWidth(1).stroke();
+    doc
+      .moveTo(indent, y)
+      .lineTo(doc.page.width - indent, y)
+      .strokeColor('#cbd5e1')
+      .lineWidth(1)
+      .stroke();
     y += 5;
 
     // Rows
@@ -535,11 +749,19 @@ export class BackupService {
         y = 40;
       }
       row.forEach((cell, i) => {
-        doc.text(cell, indent + i * colWidth, y, { width: colWidth - 5, align: 'left' });
+        doc.text(cell, indent + i * colWidth, y, {
+          width: colWidth - 5,
+          align: 'left',
+        });
       });
       y += 12;
       if (rowIdx % 5 === 4) {
-        doc.moveTo(indent, y).lineTo(doc.page.width - indent, y).strokeColor('#f1f5f9').lineWidth(0.5).stroke();
+        doc
+          .moveTo(indent, y)
+          .lineTo(doc.page.width - indent, y)
+          .strokeColor('#f1f5f9')
+          .lineWidth(0.5)
+          .stroke();
         y += 3;
       }
     });
@@ -598,14 +820,27 @@ export class BackupService {
   private async createOrUpdateMonthlySQLBackup() {
     try {
       const now = new Date();
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthNames = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
       const monthName = monthNames[now.getMonth()];
       const year = now.getFullYear();
       const filename = `DB_${monthName}-${year}.sql`;
       const sqlFile = path.join(this.backupDir, filename);
 
       const isNewFile = !fs.existsSync(sqlFile);
-      
+
       await this.generateSQLBackup(sqlFile);
 
       const stats = fs.statSync(sqlFile);
@@ -615,7 +850,7 @@ export class BackupService {
         isNewFile ? 'BACKUP_SQL_CREATED' : 'BACKUP_SQL_UPDATED',
         `${filename} ${isNewFile ? 'created' : 'updated'} (${sizeKB} KB)`,
         undefined,
-        true
+        true,
       );
 
       // Send SQL backup to WhatsApp
@@ -626,27 +861,52 @@ export class BackupService {
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Monthly SQL backup failed: ${errorMsg}`, 'BackupService');
+      this.logger.error(
+        `Monthly SQL backup failed: ${errorMsg}`,
+        'BackupService',
+      );
     }
   }
 
   private async updateMonthlySQLBackup() {
     try {
       const now = new Date();
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthNames = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ];
       const monthName = monthNames[now.getMonth()];
       const year = now.getFullYear();
       const filename = `DB_${monthName}-${year}.sql`;
       const sqlFile = path.join(this.backupDir, filename);
 
       if (fs.existsSync(sqlFile)) {
-        this.logger.log(`Updating monthly SQL backup: ${filename}`, 'BackupService');
+        this.logger.log(
+          `Updating monthly SQL backup: ${filename}`,
+          'BackupService',
+        );
         await this.generateSQLBackup(sqlFile);
-        this.logger.log(`Monthly SQL backup updated: ${filename}`, 'BackupService');
+        this.logger.log(
+          `Monthly SQL backup updated: ${filename}`,
+          'BackupService',
+        );
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to update monthly SQL backup: ${errorMsg}`, 'BackupService');
+      this.logger.error(
+        `Failed to update monthly SQL backup: ${errorMsg}`,
+        'BackupService',
+      );
     }
   }
 
@@ -655,13 +915,15 @@ export class BackupService {
       try {
         const { exec } = require('child_process');
         const dbUrl = process.env.DATABASE_URL;
-        
+
         if (!dbUrl) {
           throw new Error('DATABASE_URL not found');
         }
 
         // Parse DATABASE_URL: postgresql://user:password@host:port/database
-        const urlMatch = dbUrl.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/);
+        const urlMatch = dbUrl.match(
+          /postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/,
+        );
         if (!urlMatch) {
           throw new Error('Invalid DATABASE_URL format');
         }
@@ -670,10 +932,13 @@ export class BackupService {
 
         // Use docker exec to run pg_dump inside the postgres container
         const command = `docker exec pump-db pg_dump -U ${user} -d ${database} -F p > "${filePath}"`;
-        
+
         exec(command, (error, stdout, stderr) => {
           if (error) {
-            this.logger.error(`SQL backup error: ${error.message}`, 'BackupService');
+            this.logger.error(
+              `SQL backup error: ${error.message}`,
+              'BackupService',
+            );
             reject(error);
             return;
           }
@@ -684,7 +949,11 @@ export class BackupService {
           resolve();
         });
       } catch (error) {
-        this.logger.error('SQL backup generation error', error instanceof Error ? error.message : 'Unknown', 'BackupService');
+        this.logger.error(
+          'SQL backup generation error',
+          error instanceof Error ? error.message : 'Unknown',
+          'BackupService',
+        );
         reject(error);
       }
     });

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CustomLogger } from '../logger/custom-logger.service';
 import { ShiftStatus } from '@prisma/client';
@@ -8,7 +8,7 @@ import { BackupService } from '../backup/backup.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
-export class ShiftsService {
+export class ShiftsService implements OnModuleInit {
   constructor(
     private prisma: PrismaService,
     private whatsappService: WhatsappService,
@@ -16,6 +16,19 @@ export class ShiftsService {
     private backupService: BackupService,
     private logger: CustomLogger,
   ) {}
+
+  async onModuleInit() {
+    // Wait for a short period to ensure all other services are fully initialized
+    setTimeout(() => {
+      this.checkAndRunMissedShiftManagement().catch((err) => {
+        this.logger.error(
+          'Startup shift check failed',
+          err.message,
+          'ShiftsService',
+        );
+      });
+    }, 12000);
+  }
 
   async startShift(userId: string) {
     try {
@@ -331,65 +344,6 @@ export class ShiftsService {
     };
   }
 
-  @Cron(CronExpression.EVERY_MINUTE)
-  async autoCloseAndStartShift() {
-    try {
-      const prefs = await this.prisma.notificationPreferences.findFirst();
-      if (!prefs?.autoCloseShift) {
-        return;
-      }
-
-      const now = new Date();
-      const timeString = now.toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Karachi',
-      });
-
-      const startTime = prefs.autoShiftStartTime || '00:00';
-      const endTime = prefs.autoShiftEndTime || '12:00';
-
-      if (timeString !== startTime && timeString !== endTime) {
-        return;
-      }
-
-      const openShift = await this.getCurrentShift();
-
-      if (!openShift) {
-        this.logger.log(
-          'No open shift found. Starting new shift automatically.',
-          'ShiftsService',
-        );
-        const users = await this.prisma.user.findMany({ take: 1 });
-        if (users.length > 0) {
-          await this.startShift(users[0].id);
-          this.logger.log('Auto-started new shift', 'ShiftsService');
-        }
-        return;
-      }
-
-      const readings = openShift.readings.map((r) => ({
-        nozzleId: r.nozzleId,
-        closingReading: Number(r.nozzle.lastReading),
-      }));
-
-      const systemUserId = openShift.openerId;
-      await this.closeShift(systemUserId, readings);
-      this.logger.log('Auto-closed shift', 'ShiftsService');
-
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      await this.startShift(systemUserId);
-      this.logger.log('Auto-started new shift', 'ShiftsService');
-    } catch (err) {
-      this.logger.error(
-        'Auto shift management failed',
-        (err as Error).message,
-        'ShiftsService',
-      );
-    }
-  }
   async findAll(limit: number = 50) {
     return this.prisma.shift.findMany({
       take: limit,
@@ -399,5 +353,312 @@ export class ShiftsService {
         closer: { select: { username: true } },
       },
     });
+  }
+
+  // --- Weekly Schedule Management ---
+
+  async getSchedules() {
+    return this.prisma.shiftSchedule.findMany({
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }],
+    });
+  }
+
+  async addSchedule(data: {
+    dayOfWeek: number;
+    startTime: string;
+    endTime: string;
+  }) {
+    if (data.dayOfWeek < 0 || data.dayOfWeek > 6) {
+      throw new BadRequestException('Invalid day of week (0-6)');
+    }
+
+    const allSchedules = await this.prisma.shiftSchedule.findMany({
+      where: { enabled: true },
+    });
+
+    for (const schedule of allSchedules) {
+      if (this.doSchedulesOverlap(data, schedule)) {
+        throw new BadRequestException(
+          `Schedule overlaps with existing one on ${this.getDayName(schedule.dayOfWeek)} (${schedule.startTime} - ${schedule.endTime})`,
+        );
+      }
+    }
+
+    return this.prisma.shiftSchedule.create({
+      data: { ...data, enabled: true },
+    });
+  }
+
+  async deleteSchedule(id: string) {
+    return this.prisma.shiftSchedule.delete({ where: { id } });
+  }
+
+  async toggleSchedule(id: string, enabled: boolean) {
+    return this.prisma.shiftSchedule.update({
+      where: { id },
+      data: { enabled },
+    });
+  }
+
+  private doSchedulesOverlap(
+    s1: { dayOfWeek: number; startTime: string; endTime: string },
+    s2: { dayOfWeek: number; startTime: string; endTime: string },
+  ): boolean {
+    const toWeekMinutes = (day: number, time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return day * 24 * 60 + h * 60 + m;
+    };
+
+    const start1 = toWeekMinutes(s1.dayOfWeek, s1.startTime);
+    let end1 = toWeekMinutes(s1.dayOfWeek, s1.endTime);
+    if (this.timeToMinutes(s1.endTime) <= this.timeToMinutes(s1.startTime)) {
+      end1 += 24 * 60;
+    }
+
+    const start2 = toWeekMinutes(s2.dayOfWeek, s2.startTime);
+    let end2 = toWeekMinutes(s2.dayOfWeek, s2.endTime);
+    if (this.timeToMinutes(s2.endTime) <= this.timeToMinutes(s2.startTime)) {
+      end2 += 24 * 60;
+    }
+
+    // Check for overlap in a circular week (10080 minutes)
+    const segments1 = this.getWeekSegments(start1, end1);
+    const segments2 = this.getWeekSegments(start2, end2);
+
+    for (const seg1 of segments1) {
+      for (const seg2 of segments2) {
+        if (seg1.start < seg2.end && seg2.start < seg1.end) return true;
+      }
+    }
+    return false;
+  }
+
+  private getWeekSegments(
+    start: number,
+    end: number,
+  ): { start: number; end: number }[] {
+    const week = 7 * 24 * 60;
+    const s = start % week;
+    const e = end % week;
+
+    if (end - start >= week) return [{ start: 0, end: week }];
+    if (e < s) {
+      return [
+        { start: s, end: week },
+        { start: 0, end: e },
+      ];
+    }
+    return [{ start: s, end: e }];
+  }
+
+  private timeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  // --- Updated Auto-Closure Logic ---
+
+  @Cron(CronExpression.EVERY_MINUTE)
+  async autoCloseAndStartShift() {
+    try {
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      const weeklySchedules = await this.prisma.shiftSchedule.findMany({
+        where: { enabled: true },
+      });
+
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: 'Asia/Karachi',
+      });
+      const dayOfWeek = now.getDay();
+
+      let triggerFound = false;
+      if (prefs?.autoCloseShift) {
+        if (
+          timeString === prefs.autoShiftStartTime ||
+          timeString === prefs.autoShiftEndTime
+        ) {
+          triggerFound = true;
+        }
+      }
+
+      if (!triggerFound) {
+        // Check today's schedules
+        const todaySchedules = weeklySchedules.filter(
+          (s) => s.dayOfWeek === dayOfWeek,
+        );
+        for (const s of todaySchedules) {
+          if (timeString === s.startTime || timeString === s.endTime) {
+            triggerFound = true;
+            break;
+          }
+        }
+
+        // Check if we are at the end of a shift that started yesterday and crossed midnight
+        if (!triggerFound) {
+          const yesterday = (dayOfWeek + 6) % 7;
+          const yesterdaySchedules = weeklySchedules.filter(
+            (s) => s.dayOfWeek === yesterday,
+          );
+          for (const s of yesterdaySchedules) {
+            const isCrossMidnight =
+              this.timeToMinutes(s.endTime) <= this.timeToMinutes(s.startTime);
+            if (isCrossMidnight && timeString === s.endTime) {
+              triggerFound = true;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!triggerFound) return;
+
+      const openShift = await this.getCurrentShift();
+
+      if (!openShift) {
+        this.logger.log(
+          'Triggered rotation: No open shift. Starting new.',
+          'ShiftsService',
+        );
+        const users = await this.prisma.user.findMany({ take: 1 });
+        if (users.length > 0) await this.startShift(users[0].id);
+        return;
+      }
+
+      this.logger.log(
+        `Triggered rotation for shift ${openShift.id}`,
+        'ShiftsService',
+      );
+      const readings = openShift.readings.map((r) => ({
+        nozzleId: r.nozzleId,
+        closingReading: Number(r.nozzle.lastReading),
+      }));
+
+      await this.closeShift(openShift.openerId, readings);
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await this.startShift(openShift.openerId);
+    } catch (err) {
+      this.logger.error(
+        'Auto shift management failed',
+        (err as Error).message,
+        'ShiftsService',
+      );
+    }
+  }
+
+  async checkAndRunMissedShiftManagement() {
+    try {
+      this.logger.log(
+        'Startup: Checking for missed rotations...',
+        'ShiftsService',
+      );
+      const prefs = await this.prisma.notificationPreferences.findFirst();
+      const weeklySchedules = await this.prisma.shiftSchedule.findMany({
+        where: { enabled: true },
+      });
+
+      const openShift = await this.getCurrentShift();
+      if (!openShift) return;
+
+      const now = new Date();
+      const shiftStart = new Date(openShift.startTime);
+      const rotationPoints: Date[] = [];
+
+      if (prefs?.autoCloseShift) {
+        rotationPoints.push(
+          this.getNextRotationTimeFromPoint(
+            shiftStart,
+            prefs.autoShiftStartTime || '00:00',
+          ),
+          this.getNextRotationTimeFromPoint(
+            shiftStart,
+            prefs.autoShiftEndTime || '12:00',
+          ),
+        );
+      }
+
+      // Check weekly schedules for EVERY day between shiftStart and now
+      const checkDate = new Date(shiftStart);
+      // Reset seconds/ms for comparison
+      checkDate.setSeconds(0, 0);
+      const limit = new Date(now);
+      limit.setSeconds(0, 0);
+
+      while (checkDate <= limit) {
+        const currentCheckDay = checkDate.getDay();
+        const schedules = weeklySchedules.filter(
+          (s) => s.dayOfWeek === currentCheckDay,
+        );
+
+        for (const s of schedules) {
+          const startP = this.getSpecificTimeOnDate(checkDate, s.startTime);
+          const endP = this.getSpecificTimeOnDate(checkDate, s.endTime);
+
+          if (startP > shiftStart && startP < now) rotationPoints.push(startP);
+
+          // For endTime, it might be on the next day if it crosses midnight
+          const actualEndP = new Date(endP);
+          if (
+            this.timeToMinutes(s.endTime) <= this.timeToMinutes(s.startTime)
+          ) {
+            actualEndP.setDate(actualEndP.getDate() + 1);
+          }
+          if (actualEndP > shiftStart && actualEndP < now)
+            rotationPoints.push(actualEndP);
+        }
+        checkDate.setDate(checkDate.getDate() + 1);
+      }
+
+      rotationPoints.sort((a, b) => a.getTime() - b.getTime());
+      if (rotationPoints.some((p) => p > shiftStart && p < now)) {
+        this.logger.log(
+          `Missed rotations detected for shift ${openShift.id}. Rotating.`,
+          'ShiftsService',
+        );
+        const readings = openShift.readings.map((r) => ({
+          nozzleId: r.nozzleId,
+          closingReading: Number(r.nozzle.lastReading),
+        }));
+        await this.closeShift(openShift.openerId, readings);
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await this.startShift(openShift.openerId);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Startup shift check failed',
+        error instanceof Error ? error.message : 'Unknown',
+        'ShiftsService',
+      );
+    }
+  }
+
+  private getNextRotationTimeFromPoint(point: Date, timeStr: string): Date {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(point);
+    d.setHours(h, m, 0, 0);
+    if (d <= point) d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  private getSpecificTimeOnDate(date: Date, timeStr: string): Date {
+    const [h, m] = timeStr.split(':').map(Number);
+    const d = new Date(date);
+    d.setHours(h, m, 0, 0);
+    return d;
+  }
+
+  private getDayName(day: number): string {
+    return [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ][day];
   }
 }

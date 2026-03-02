@@ -12,6 +12,9 @@ import {
   CheckCircle2,
   Moon,
   Sun,
+  Plus,
+  Trash2,
+  Calendar,
 } from "lucide-react";
 import { useToast } from "@/components/Toast";
 import { useAuth } from "@/context/AuthContext";
@@ -43,6 +46,14 @@ interface AutoCloseConfig {
   endTime: string;
 }
 
+interface ShiftSchedule {
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  enabled: boolean;
+}
+
 export default function ShiftsPage() {
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -57,17 +68,26 @@ export default function ShiftsPage() {
     startTime: "00:00",
     endTime: "12:00",
   });
+  const [schedules, setSchedules] = useState<ShiftSchedule[]>([]);
+  const [isAddingSchedule, setIsAddingSchedule] = useState(false);
+  const [newSchedule, setNewSchedule] = useState({
+    dayOfWeek: 0,
+    startTime: "08:00",
+    endTime: "20:00",
+  });
   const toast = useToast();
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
 
   const fetchCurrentShift = async () => {
     try {
-      const [shiftRes, nozzlesRes, autoCloseRes] = await Promise.all([
-        api.get("/shifts/current"),
-        api.get("/inventory/nozzles"),
-        api.get("/shifts/auto-close-status"),
-      ]);
+      const [shiftRes, nozzlesRes, autoCloseRes, schedulesRes] =
+        await Promise.all([
+          api.get("/shifts/current"),
+          api.get("/inventory/nozzles"),
+          api.get("/shifts/auto-close-status"),
+          api.get("/shifts/schedules"),
+        ]);
       const shift = shiftRes.data as Shift;
       setCurrentShift(shift);
       setNozzles(nozzlesRes.data);
@@ -76,6 +96,7 @@ export default function ShiftsPage() {
         startTime: autoCloseRes.data.startTime || "00:00",
         endTime: autoCloseRes.data.endTime || "12:00",
       });
+      setSchedules(schedulesRes.data);
 
       if (shift?.readings) {
         const prefilled: Record<string, number> = {};
@@ -110,7 +131,12 @@ export default function ShiftsPage() {
   const getShiftHours = () => {
     const [sh, sm] = autoClose.startTime.split(":").map((v) => Number(v || 0));
     const [eh, em] = autoClose.endTime.split(":").map((v) => Number(v || 0));
-    if (Number.isNaN(sh) || Number.isNaN(sm) || Number.isNaN(eh) || Number.isNaN(em)) {
+    if (
+      Number.isNaN(sh) ||
+      Number.isNaN(sm) ||
+      Number.isNaN(eh) ||
+      Number.isNaN(em)
+    ) {
       return null;
     }
     const start = sh * 60 + sm;
@@ -212,6 +238,59 @@ export default function ShiftsPage() {
     }
   };
 
+  const handleAddSchedule = async () => {
+    setIsSubmitting(true);
+    try {
+      await api.post("/shifts/schedules", newSchedule);
+      await fetchCurrentShift();
+      setIsAddingSchedule(false);
+      toast.success(
+        "Schedule Added",
+        "Weekly shift rotation added successfully.",
+      );
+    } catch (err: any) {
+      toast.error(
+        "Failed",
+        err.response?.data?.message || "Failed to add schedule",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    try {
+      await api.delete(`/shifts/schedules/${id}`);
+      setSchedules((prev) => prev.filter((s) => s.id !== id));
+      toast.success("Deleted", "Schedule removed.");
+    } catch (err: any) {
+      toast.error("Failed", "Failed to delete schedule");
+    }
+  };
+
+  const handleToggleSchedule = async (id: string, enabled: boolean) => {
+    try {
+      await api.post(`/shifts/schedules/${id}/toggle`, { enabled });
+      setSchedules((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, enabled } : s)),
+      );
+    } catch (err: any) {
+      toast.error("Failed", "Failed to toggle schedule");
+    }
+  };
+
+  const getDayName = (day: number) => {
+    return [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ][day];
+  };
+
   if (isLoading) {
     return (
       <DashboardLayout>
@@ -229,6 +308,7 @@ export default function ShiftsPage() {
   return (
     <DashboardLayout>
       <div className="max-w-5xl mx-auto space-y-8 p-4">
+        {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-100 to-zinc-400 tracking-tight">
@@ -240,10 +320,10 @@ export default function ShiftsPage() {
             </p>
           </div>
 
-          <div className="p-1.5 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center gap-4 pr-6 pl-4 py-3 backdrop-blur-sm">
+          <div className="p-1.5 rounded-2xl bg-zinc-900/50 border border-zinc-800 flex items-center gap-4 pr-6 pl-4 py-3 backdrop-blur-sm shadow-xl shadow-black/20">
             <div className="flex flex-col gap-0.5">
               <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">
-                Auto Shift Schedule
+                General Schedule
               </span>
               <div className="flex flex-col">
                 <span className="text-xs text-zinc-300">
@@ -252,64 +332,57 @@ export default function ShiftsPage() {
                 </span>
                 {getShiftHours() !== null && (
                   <span className="text-[11px] text-zinc-500">
-                    Shift Hours: {getShiftHours()}
+                    Duration: {getShiftHours()}h
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-3 ml-4">
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase text-zinc-500 font-bold tracking-wider">
-                  Start Time
-                </span>
-                <input
-                  type="time"
-                  value={autoClose.startTime}
-                  onChange={(e) =>
-                    setAutoClose((prev) => ({
-                      ...prev,
-                      startTime: e.target.value || "00:00",
-                    }))
-                  }
-                  onBlur={() => {
-                    void api
-                      .post("/shifts/toggle-auto-close", {
-                        enabled: autoClose.enabled,
-                        startTime: autoClose.startTime,
-                        endTime: autoClose.endTime,
-                      })
-                      .catch(() => {});
-                  }}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-red-600"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="text-[9px] uppercase text-zinc-500 font-bold tracking-wider">
-                  End Time
-                </span>
-                <input
-                  type="time"
-                  value={autoClose.endTime}
-                  onChange={(e) =>
-                    setAutoClose((prev) => ({
-                      ...prev,
-                      endTime: e.target.value || "12:00",
-                    }))
-                  }
-                  onBlur={() => {
-                    void api
-                      .post("/shifts/toggle-auto-close", {
-                        enabled: autoClose.enabled,
-                        startTime: autoClose.startTime,
-                        endTime: autoClose.endTime,
-                      })
-                      .catch(() => {});
-                  }}
-                  className="bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-200 outline-none focus:border-red-600"
-                />
-              </div>
+            <div className="flex items-center gap-2 ml-4">
+              <input
+                type="time"
+                value={autoClose.startTime}
+                onChange={(e) =>
+                  setAutoClose((prev) => ({
+                    ...prev,
+                    startTime: e.target.value || "00:00",
+                  }))
+                }
+                onBlur={() => {
+                  void api
+                    .post("/shifts/toggle-auto-close", {
+                      enabled: autoClose.enabled,
+                      startTime: autoClose.startTime,
+                      endTime: autoClose.endTime,
+                    })
+                    .catch(() => {});
+                }}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-red-600 transition-colors"
+              />
+              <span className="text-zinc-700">to</span>
+              <input
+                type="time"
+                value={autoClose.endTime}
+                onChange={(e) =>
+                  setAutoClose((prev) => ({
+                    ...prev,
+                    endTime: e.target.value || "12:00",
+                  }))
+                }
+                onBlur={() => {
+                  void api
+                    .post("/shifts/toggle-auto-close", {
+                      enabled: autoClose.enabled,
+                      startTime: autoClose.startTime,
+                      endTime: autoClose.endTime,
+                    })
+                    .catch(() => {});
+                }}
+                className="bg-zinc-950 border border-zinc-800 rounded-lg px-2 py-1 text-[11px] text-zinc-200 outline-none focus:border-red-600 transition-colors"
+              />
             </div>
+
+            <div className="h-8 w-px bg-zinc-800 mx-2" />
 
             <label className="relative inline-flex items-center cursor-pointer">
               <input
@@ -318,9 +391,151 @@ export default function ShiftsPage() {
                 onChange={handleToggleAutoClose}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-zinc-800 rounded-full peer peer-focus:ring-2 peer-focus:ring-red-900 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-400 after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600 peer-checked:after:bg-white"></div>
+              <div className="w-10 h-5 bg-zinc-800 rounded-full peer peer-focus:ring-1 peer-focus:ring-red-900 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2.5px] after:left-[2.5px] after:bg-zinc-500 after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-red-600 peer-checked:after:bg-white"></div>
             </label>
           </div>
+        </div>
+
+        {/* Weekly Day-wise Schedules Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-zinc-300 flex items-center gap-2">
+              <Calendar size={18} className="text-red-500" />
+              Day-wise Schedules
+            </h2>
+            <button
+              onClick={() => setIsAddingSchedule(!isAddingSchedule)}
+              className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 text-sm font-bold hover:bg-zinc-800 flex items-center gap-2 transition-all"
+            >
+              <Plus size={16} />
+              Add Rotation
+            </button>
+          </div>
+
+          {isAddingSchedule && (
+            <div className="p-6 rounded-2xl bg-zinc-900/40 border border-zinc-800 animate-in slide-in-from-top-4 duration-300">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                    Day of Week
+                  </label>
+                  <select
+                    value={newSchedule.dayOfWeek}
+                    onChange={(e) =>
+                      setNewSchedule((prev) => ({
+                        ...prev,
+                        dayOfWeek: Number(e.target.value),
+                      }))
+                    }
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-red-600"
+                  >
+                    {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+                      <option key={day} value={day}>
+                        {getDayName(day)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                    Start Time
+                  </label>
+                  <input
+                    type="time"
+                    value={newSchedule.startTime}
+                    onChange={(e) =>
+                      setNewSchedule((prev) => ({
+                        ...prev,
+                        startTime: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-red-600"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                    End Time
+                  </label>
+                  <input
+                    type="time"
+                    value={newSchedule.endTime}
+                    onChange={(e) =>
+                      setNewSchedule((prev) => ({
+                        ...prev,
+                        endTime: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm text-zinc-200 outline-none focus:border-red-600"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddSchedule}
+                    disabled={isSubmitting}
+                    className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2 rounded-lg text-sm transition-all"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setIsAddingSchedule(false)}
+                    className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-2 rounded-lg text-sm transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {schedules.map((schedule) => (
+              <div
+                key={schedule.id}
+                className="p-4 rounded-xl bg-zinc-900/30 border border-zinc-800 flex items-center justify-between group hover:border-zinc-700 transition-all"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="h-10 w-10 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 group-hover:text-red-500 transition-colors">
+                    <Clock size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-zinc-200">
+                      {getDayName(schedule.dayOfWeek)}
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">
+                      {formatTimeDisplay(schedule.startTime)} -{" "}
+                      {formatTimeDisplay(schedule.endTime)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={schedule.enabled}
+                      onChange={(e) =>
+                        handleToggleSchedule(schedule.id, e.target.checked)
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-8 h-4 bg-zinc-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-zinc-500 after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-red-600 peer-checked:after:bg-white"></div>
+                  </label>
+                  <button
+                    onClick={() => handleDeleteSchedule(schedule.id)}
+                    className="p-2 rounded-lg text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {schedules.length === 0 && !isAddingSchedule && (
+            <div className="p-8 text-center border border-zinc-800 rounded-2xl bg-zinc-900/10 text-zinc-600 text-sm">
+              No custom weekly rotations configured. Using general schedule
+              only.
+            </div>
+          )}
         </div>
 
         {error && (
