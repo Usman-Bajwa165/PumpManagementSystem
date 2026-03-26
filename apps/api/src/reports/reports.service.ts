@@ -98,15 +98,70 @@ export class ReportsService {
         include: { debitAccount: true, creditAccount: true },
       });
 
-      // Calculate balances for each account
+      // 1. Calculate Opening Balances (all transactions BEFORE startDate)
+      const openingTransactions = await this.prisma.transaction.findMany({
+        where: { createdAt: { lt: startDate || new Date(0) } },
+      });
+
       const accountBalances = new Map<string, number>();
       accounts.forEach((a) => accountBalances.set(a.id, 0));
 
-      transactions.forEach((tx) => {
-        const debitBal = accountBalances.get(tx.debitAccountId) || 0;
-        const creditBal = accountBalances.get(tx.creditAccountId) || 0;
-        accountBalances.set(tx.debitAccountId, debitBal + Number(tx.amount));
-        accountBalances.set(tx.creditAccountId, creditBal + Number(tx.amount));
+      openingTransactions.forEach((tx) => {
+        const isDebitNature =
+          tx.debitAccountId &&
+          accounts.find((a) => a.id === tx.debitAccountId)?.type ===
+            AccountType.ASSET;
+        // The above is too complex, let's just use the standard debit/credit logic
+        // Assets/Expenses: Balance = Debit - Credit
+        // Liabilities/Equity/Income: Balance = Credit - Debit
+        // But for a simple internal map, we can just store the delta.
+      });
+
+      // Let's use a simpler approach: 
+      // Total Balance at end of period = Transactions up to end of period.
+      const totalPeriodTransactions = await this.prisma.transaction.findMany({
+        where: { createdAt: { lte: adjustedEnd || new Date() } },
+      });
+
+      totalPeriodTransactions.forEach((tx) => {
+        const debitId = tx.debitAccountId;
+        const creditId = tx.creditAccountId;
+        const amount = Number(tx.amount);
+
+        const accDebit = accounts.find((a) => a.id === debitId);
+        const accCredit = accounts.find((a) => a.id === creditId);
+
+        if (accDebit) {
+          const current = accountBalances.get(debitId) || 0;
+          // Debit increases Assets/Expenses, decreases others
+          if (
+            ([AccountType.ASSET, AccountType.EXPENSE] as AccountType[]).includes(
+              accDebit.type,
+            )
+          ) {
+            accountBalances.set(debitId, current + amount);
+          } else {
+            accountBalances.set(debitId, current - amount);
+          }
+        }
+
+        if (accCredit) {
+          const current = accountBalances.get(creditId) || 0;
+          // Credit increases Liab/Eq/Inc, decreases Assets/Exp
+          if (
+            (
+              [
+                AccountType.LIABILITY,
+                AccountType.EQUITY,
+                AccountType.INCOME,
+              ] as AccountType[]
+            ).includes(accCredit.type)
+          ) {
+            accountBalances.set(creditId, current + amount);
+          } else {
+            accountBalances.set(creditId, current - amount);
+          }
+        }
       });
 
       const assetAccounts = accounts.filter(
@@ -1308,7 +1363,11 @@ export class ReportsService {
         include: { debitAccount: true, creditAccount: true },
       });
 
-      // Calculate NET balances: debits - credits for each account
+      // Use a more professional approach: Net balance at end date = sum of all transactions up to end date
+      const periodEndTransactions = await this.prisma.transaction.findMany({
+        where: { createdAt: { lte: adjustedEnd || new Date() } },
+      });
+
       const accountBalances = new Map<
         string,
         { debits: number; credits: number }
@@ -1317,20 +1376,12 @@ export class ReportsService {
         accountBalances.set(a.id, { debits: 0, credits: 0 }),
       );
 
-      transactions.forEach((tx) => {
+      periodEndTransactions.forEach((tx) => {
         const amount = Number(tx.amount);
-
-        // Debit side
-        const debitBal = accountBalances.get(tx.debitAccountId);
-        if (debitBal) {
-          debitBal.debits += amount;
-        }
-
-        // Credit side
-        const creditBal = accountBalances.get(tx.creditAccountId);
-        if (creditBal) {
-          creditBal.credits += amount;
-        }
+        const dBal = accountBalances.get(tx.debitAccountId);
+        if (dBal) dBal.debits += amount;
+        const cBal = accountBalances.get(tx.creditAccountId);
+        if (cBal) cBal.credits += amount;
       });
 
       const trialBalance = accounts.map((a) => {

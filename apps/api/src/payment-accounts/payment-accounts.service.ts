@@ -1,10 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { AccountingService } from '../accounting/accounting.service';
 
 @Injectable()
 export class PaymentAccountsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(forwardRef(() => AccountingService))
+    private accountingService: AccountingService,
+  ) {}
 
   async create(
     data: {
@@ -15,33 +20,22 @@ export class PaymentAccountsService {
     },
     userId?: string,
   ) {
-    const created = await this.prisma.paymentAccount.create({ data });
+    const created = await this.prisma.paymentAccount.create({
+      data: { ...data, balance: 0 }, // Always start with 0 in the record, adjustment will set it
+    });
 
-    // If opening balance provided, create adjustment transaction
+    // If opening balance provided, create adjustment transaction via accounting service
     if (data.balance && Number(data.balance) > 0) {
-      const bankAccount = await this.prisma.account.findFirst({
-        where: { code: '10201' },
+      await this.accountingService.createTransaction({
+        debitCode: '10201', // Bank Account
+        creditCode: '30101', // Owner Equity
+        amount: Number(data.balance),
+        description: `Opening balance for ${created.name}`,
+        paymentAccountId: created.id,
+        createdById: userId,
       });
-      const equityAccount = await this.prisma.account.findFirst({
-        where: { code: '30101' },
-      });
-
-      if (bankAccount && equityAccount) {
-        // Debit Bank, Credit Equity for opening balance
-        await this.prisma.transaction.create({
-          data: {
-            debitAccountId: bankAccount.id,
-            creditAccountId: equityAccount.id,
-            amount: Number(data.balance),
-            description: `Opening balance for ${created.name}`,
-            paymentAccountId: created.id,
-            createdById: userId,
-          },
-        });
-      }
     }
 
-    await this.syncBankAccountBalance();
     return created;
   }
 
@@ -53,7 +47,6 @@ export class PaymentAccountsService {
 
   async delete(id: string) {
     const deleted = await this.prisma.paymentAccount.delete({ where: { id } });
-    await this.syncBankAccountBalance();
     return deleted;
   }
 
@@ -73,54 +66,37 @@ export class PaymentAccountsService {
 
     const updated = await this.prisma.paymentAccount.update({
       where: { id },
-      data,
+      data: { ...data, balance: undefined }, // Don't let direct update of balance field
     });
 
-    // If balance was updated, create adjustment transaction and sync
+    // If balance was provided, create adjustment transaction via AccountingService
     if (data.balance !== undefined && paymentAccount) {
       const oldBalance = Number(paymentAccount.balance || 0);
       const newBalance = Number(data.balance);
       const difference = newBalance - oldBalance;
 
       if (difference !== 0) {
-        // Get Bank Account (10201) and Owner Equity (30101)
-        const bankAccount = await this.prisma.account.findFirst({
-          where: { code: '10201' },
-        });
-        const equityAccount = await this.prisma.account.findFirst({
-          where: { code: '30101' },
-        });
-
-        if (bankAccount && equityAccount) {
-          // Create adjustment transaction
-          if (difference > 0) {
-            // Increase: Debit Bank, Credit Equity
-            await this.prisma.transaction.create({
-              data: {
-                debitAccountId: bankAccount.id,
-                creditAccountId: equityAccount.id,
-                amount: Math.abs(difference),
-                description: `Balance adjustment for ${updated.name} - Increase`,
-                paymentAccountId: id,
-                createdById: userId,
-              },
-            });
-          } else {
-            // Decrease: Debit Equity, Credit Bank
-            await this.prisma.transaction.create({
-              data: {
-                debitAccountId: equityAccount.id,
-                creditAccountId: bankAccount.id,
-                amount: Math.abs(difference),
-                description: `Balance adjustment for ${updated.name} - Decrease`,
-                paymentAccountId: id,
-                createdById: userId,
-              },
-            });
-          }
+        if (difference > 0) {
+          // Increase: Debit Bank, Credit Equity
+          await this.accountingService.createTransaction({
+            debitCode: '10201',
+            creditCode: '30101',
+            amount: Math.abs(difference),
+            description: `Balance adjustment for ${updated.name} - Increase`,
+            paymentAccountId: id,
+            createdById: userId,
+          });
+        } else {
+          // Decrease: Debit Equity, Credit Bank
+          await this.accountingService.createTransaction({
+            debitCode: '30101',
+            creditCode: '10201',
+            amount: Math.abs(difference),
+            description: `Balance adjustment for ${updated.name} - Decrease`,
+            paymentAccountId: id,
+            createdById: userId,
+          });
         }
-
-        await this.syncBankAccountBalance();
       }
     }
 
@@ -299,22 +275,5 @@ export class PaymentAccountsService {
         totalTransactions: salesBalance + income - expenses,
       },
     };
-  }
-
-  private async syncBankAccountBalance() {
-    // Get all payment accounts
-    const paymentAccounts = await this.prisma.paymentAccount.findMany();
-
-    // Calculate total balance
-    const totalBalance = paymentAccounts.reduce(
-      (sum, pa) => sum + Number(pa.balance || 0),
-      0,
-    );
-
-    // Update Bank Account (code: 10201)
-    await this.prisma.account.updateMany({
-      where: { code: '10201' },
-      data: { balance: totalBalance },
-    });
   }
 }
